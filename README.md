@@ -26,8 +26,6 @@
 
 ## Install
 
-> Zephydian is still in development. These instructions will work once the first release is published.
-
 ### Homebrew (recommended)
 
 ```sh

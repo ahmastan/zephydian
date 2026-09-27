@@ -37,3 +37,24 @@ jobs:
             --title "Zephydian $VERSION" \
             --generate-notes \
             --notes "SHA-256 of the zip: \`$SHA\`"
+      - name: Update the Homebrew tap
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::warning::The TAP_TOKEN secret isn't set, so the Homebrew tap wasn't updated."
+            exit 0
+          fi
+          VERSION=${GITHUB_REF_NAME#v}
+          SHA=$(cat dist/Zephydian-$VERSION.zip.sha256)
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/ahmastan/homebrew-tap.git" tap
+          cd tap
+          sed -i '' -E "s/^  version \".*\"/  version \"$VERSION\"/; s/^  sha256 \".*\"/  sha256 \"$SHA\"/" Casks/zephydian.rb
+          if git diff --quiet; then
+            echo "The cask is already at $VERSION."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "zephydian $VERSION"
+          git push
