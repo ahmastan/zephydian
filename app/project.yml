@@ -1,0 +1,74 @@
+# Zephydian Xcode project spec.
+#
+# This file is the SOURCE OF TRUTH for the Xcode project. XcodeGen turns it into
+# Zephydian.xcodeproj (which is generated and git-ignored):
+#
+#     brew install xcodegen      # once
+#     cd app && xcodegen         # after changing this file
+#
+# ⚠️ Change build settings HERE, not in Xcode's UI. Edits made in Xcode's
+# settings screens are overwritten the next time the project is generated.
+# (Adding/removing .swift files is fine anywhere: the Zephydian/ folder is synced.)
+
+name: Zephydian
+
+options:
+  bundleIdPrefix: com.ahmastan
+  projectFormat: xcode16_0          # opens in Xcode 16+ and on GitHub's build machines
+  createIntermediateGroups: true
+  deploymentTarget:
+    macOS: "14.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor   # UI code runs on the main thread by default
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    MARKETING_VERSION: 0.1.0                   # the version users see
+    CURRENT_PROJECT_VERSION: 1                 # build number, bump every release
+
+targets:
+  Zephydian:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Zephydian
+        type: syncedFolder
+    info:
+      path: Config/Info.plist
+      properties:
+        CFBundleName: Zephydian
+        CFBundleDisplayName: Zephydian
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        LSApplicationCategoryType: public.app-category.utilities
+        LSUIElement: true                      # menu bar app: no Dock icon
+        NSHumanReadableCopyright: "© 2026 ahmastan. MIT License."
+        # Private drag-and-drop type for reordering note tabs (never leaves the app).
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.ahmastan.zephydian.note-tab
+            UTTypeDescription: Zephydian note tab
+            UTTypeConformsTo: [public.data]
+    entitlements:
+      path: Config/Zephydian.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        # Read-only access to the Dock's settings, only to warn about clashing macOS Hot Corners.
+        com.apple.security.temporary-exception.shared-preference.read-only:
+          - com.apple.dock
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ahmastan.zephydian
+        PRODUCT_NAME: Zephydian
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"                # "Sign to Run Locally" (free, no Apple account)
+        DEVELOPMENT_TEAM: ""
+        ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon      # Resources/AppIcon.icon (Icon Composer)
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        COMBINE_HIDPI_IMAGES: YES
+        DEAD_CODE_STRIPPING: YES
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+    scheme: {}

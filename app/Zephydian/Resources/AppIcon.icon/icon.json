@@ -1,0 +1,131 @@
+{
+  "fill" : {
+    "linear-gradient" : [
+      "display-p3:0.15853,0.28541,0.58117,1.00000",
+      "display-p3:0.46162,0.22277,0.54052,1.00000"
+    ],
+    "orientation" : {
+      "start" : {
+        "x" : 0.5,
+        "y" : 1
+      },
+      "stop" : {
+        "x" : 0.5,
+        "y" : 0
+      }
+    }
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "blend-mode-specializations" : [
+            {
+              "value" : "screen"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "plus-darker"
+            }
+          ],
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : "none"
+            }
+          ],
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "jet-icon-dark-details.svg",
+          "name" : "jet-icon-dark-details",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 1
+            }
+          ],
+          "position" : {
+            "scale" : 1.25,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "fill-specializations" : [
+            {
+              "value" : {
+                "linear-gradient" : [
+                  "display-p3:0.08168,0.19881,0.35366,1.00000",
+                  "display-p3:0.32504,0.25128,0.76341,1.00000"
+                ]
+              }
+            },
+            {
+              "appearance" : "dark",
+              "value" : {
+                "linear-gradient" : [
+                  "display-p3:0.28748,0.22893,0.70976,1.00000",
+                  "display-p3:0.10952,0.26806,0.48781,1.00000"
+                ]
+              }
+            }
+          ],
+          "image-name" : "jet-icon-dark-jet.svg",
+          "name" : "jet-icon-dark-jet",
+          "opacity-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : 1
+            }
+          ],
+          "position" : {
+            "scale" : 1.25,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "blend-mode-specializations" : [
+            {
+              "value" : "normal"
+            },
+            {
+              "appearance" : "dark",
+              "value" : "normal"
+            }
+          ],
+          "fill" : "none",
+          "glass" : true,
+          "hidden" : true,
+          "image-name" : "jet-icon-dark-background.svg",
+          "name" : "jet-icon-dark-background",
+          "position" : {
+            "scale" : 1.25,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

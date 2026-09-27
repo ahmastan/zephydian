@@ -1,0 +1,39 @@
+# Pushing a tag like v0.1.0 builds the app, zips it and publishes a GitHub Release.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write   # needed to create the release
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Check the tag matches the app version
+        run: |
+          VERSION=$(awk '/MARKETING_VERSION:/ { print $2; exit }' app/project.yml)
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match MARKETING_VERSION $VERSION in app/project.yml"
+            exit 1
+          fi
+      - name: Build and zip
+        run: scripts/build-release.sh
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          SHA=$(cat dist/Zephydian-$VERSION.zip.sha256)
+          gh release create "$GITHUB_REF_NAME" "dist/Zephydian-$VERSION.zip" \
+            --title "Zephydian $VERSION" \
+            --generate-notes \
+            --notes "SHA-256 of the zip: \`$SHA\`"

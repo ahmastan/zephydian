@@ -1,0 +1,28 @@
+# Builds the app on every pull request (and every push to main) to catch breakage.
+name: build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate the Xcode project
+        run: cd app && xcodegen
+      - name: Build (warnings count as errors)
+        run: |
+          xcodebuild -project app/Zephydian.xcodeproj -scheme Zephydian -configuration Debug \
+            -destination 'generic/platform=macOS' -derivedDataPath app/build build SWIFT_TREAT_WARNINGS_AS_ERRORS=YES

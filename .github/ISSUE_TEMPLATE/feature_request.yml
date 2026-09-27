@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest an improvement to Zephydian
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: How would it work? Mockups welcome.
+    validations:
+      required: true
+  - type: checkboxes
+    id: lightweight
+    attributes:
+      label: Lightweight check
+      options:
+        - label: This wouldn't require network access or always-on background work

@@ -1,0 +1,55 @@
+name: Bug report
+description: Something isn't working as expected
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the panel from the top-right corner
+        2. Start Snake
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: Zephydian version
+      description: Found in Settings → About
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      placeholder: "macOS 15.3"
+    validations:
+      required: true
+  - type: dropdown
+    id: chip
+    attributes:
+      label: Mac type
+      options:
+        - Apple Silicon
+        - Intel
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install it?
+      options:
+        - Homebrew
+        - Downloaded .zip / .dmg
+        - Built from source
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or extra context

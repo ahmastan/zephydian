@@ -1,0 +1,25 @@
+name: Game idea
+description: Suggest a new tiny game for Zephydian
+labels: ["game-idea"]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Game
+      description: What is it, or what is it similar to?
+      placeholder: "Minesweeper-style"
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would it fit Zephydian?
+      description: Zephydian games should be quick to start, playable in a small panel, keyboard-friendly, and very lightweight.
+    validations:
+      required: true
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contribution
+      options:
+        - label: I'd like to try building it myself

@@ -1,0 +1,61 @@
+# ── Local-only web prototype (never committed) ──
+prototype/
+
+# ── Owner's private guides (kept on this Mac only, never committed) ──
+/CLAUDE.md
+/PLAN.md
+/DESIGN.md
+
+# ── macOS ──
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ── Xcode ──
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+timeline.xctimeline
+playground.xcworkspace
+
+# ── Swift Package Manager ──
+.build/
+.swiftpm/
+Packages/
+
+# ── Release artifacts (uploaded to GitHub Releases, not committed) ──
+*.dmg
+*.zip
+dist/
+
+# ── Signing secrets (never commit these) ──
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+.env
+.env.*
+
+# ── Node / website ──
+node_modules/
+.vercel/
+.next/
+.astro/
+
+# ── Editors ──
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+
+# ── XcodeGen output (regenerate with: cd app && xcodegen) ──
+app/Zephydian.xcodeproj/
