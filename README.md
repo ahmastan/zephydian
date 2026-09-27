@@ -18,7 +18,7 @@
 
 - **Corner hover to open.** Pick any of the four screen corners. The panel appears when you hover and disappears when you're done.
 - **Quick Notes.** A tabbed scratchpad that autosaves as plain Markdown files you can open anywhere.
-- **Tiny games.** Snake, Stackr (block stacking), Five (5-letter word guess), Spokes (letter-wheel crosswords), Fleet (sea battle), and Airship (top-down shooter). More are on the way.
+- **Tiny games.** Snake, Stackr (block stacking), Five (5-letter word guess), Spokes (letter-wheel crosswords), Fleet (sea battle), Airship (top-down shooter), 2048 (slide and merge numbers), Mines (clear the minefield), and Nines (number-placement puzzles in three difficulties).
 - **Make it yours.** Light, dark, or system appearance, accent color themes, Liquid Glass or frosted panel (macOS 26+), and a choice of menu bar icon (or none at all).
 - **Optional keyboard shortcut** to open the panel from anywhere.
 - **Featherweight.** Native Swift and SwiftUI. ~8 MB app, ~25 MB memory, and ~0.1% CPU when idle. Games pause the moment the panel hides.

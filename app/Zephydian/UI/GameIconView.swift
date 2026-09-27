@@ -15,6 +15,8 @@ struct GameIconView: View {
                     .scaledToFit()
             case .fallingBlocks:
                 FallingBlocksIcon()
+            case .mergeTiles:
+                MergeTilesIcon()
             }
         }
         .foregroundStyle(.tint)
@@ -39,6 +41,22 @@ private struct FallingBlocksIcon: View {
             }
             for c in Self.stack { context.fill(block(c), with: .style(.tint.opacity(0.45))) }
             for c in Self.piece { context.fill(block(c), with: .style(.tint)) }
+        }
+    }
+}
+
+/// 2048's icon: four tiles, each a shade stronger, like numbers growing as they merge.
+private struct MergeTilesIcon: View {
+    private static let opacities: [Double] = [0.3, 0.55, 0.75, 1]
+
+    var body: some View {
+        Canvas { context, size in
+            let gap = size.width * 0.12
+            let cell = (size.width - gap) / 2
+            for (i, opacity) in Self.opacities.enumerated() {
+                let rect = CGRect(x: CGFloat(i % 2) * (cell + gap), y: CGFloat(i / 2) * (cell + gap), width: cell, height: cell)
+                context.fill(Path(roundedRect: rect, cornerRadius: cell * 0.22), with: .style(.tint.opacity(opacity)))
+            }
         }
     }
 }

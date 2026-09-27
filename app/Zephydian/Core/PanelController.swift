@@ -420,6 +420,7 @@ final class PanelController: NSObject {
             if model.isShowingGame { model.closeGame() }
             model.tab = key == "1" ? .games : key == "2" ? .notes : .settings
         case "w": hide()
+        case "z" where model.isShowingGame: return model.gameSession?.undo() ?? false
         default: return false
         }
         return true
