@@ -7,6 +7,8 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-27
+
 ### Added
 - Three new games:
   - **2048:** slide and merge numbers. Your board is saved between launches.
