@@ -23,11 +23,14 @@ protocol GameSession: AnyObject {
     func makeHeaderAccessory() -> AnyView?
     /// Key released. Only real-time games that track held keys need this.
     func handleKeyUp(_ event: NSEvent) -> Bool
+    /// ⌘Z. Return true if a move was undone.
+    func undo() -> Bool
 }
 
 extension GameSession {
     func makeHeaderAccessory() -> AnyView? { nil }
     func handleKeyUp(_ event: NSEvent) -> Bool { false }
+    func undo() -> Bool { false }
 }
 
 // MARK: - Registry
@@ -37,6 +40,8 @@ enum GameIcon {
     case symbol(String)
     /// A falling T-piece above a stack of blocks (Stackr).
     case fallingBlocks
+    /// A 2×2 grid of number tiles in rising shades (2048).
+    case mergeTiles
 }
 
 struct GameInfo: Identifiable {
@@ -64,6 +69,12 @@ enum GameRegistry {
                  makeSession: { FleetGame() }, stat: { FleetGame.tileStat }),
         GameInfo(id: "airship", name: "Airship", icon: .symbol("airplane"),
                  makeSession: { AirshipGame() }, stat: { BestScore.label(for: AirshipGame.bestKey) }),
+        GameInfo(id: "2048", name: "2048", icon: .mergeTiles,
+                 makeSession: { Game2048() }, stat: { BestScore.label(for: Game2048.bestKey) }),
+        GameInfo(id: "mines", name: "Mines", icon: .symbol("flag.fill"),
+                 makeSession: { MinesGame() }, stat: { MinesGame.tileStat }),
+        GameInfo(id: "nines", name: "Nines", icon: .symbol("9.square.fill"),
+                 makeSession: { NinesGame() }, stat: { NinesGame.tileStat }),
     ]
 
     static func info(for id: String?) -> GameInfo? { all.first { $0.id == id } }
@@ -111,11 +122,31 @@ enum BestScore {
     }
 }
 
+/// Best (lowest) times in seconds, saved in UserDefaults. 0 = no time yet.
+enum BestTime {
+    static func get(_ key: String) -> Int { UserDefaults.standard.integer(forKey: key) }
+
+    /// Saves `seconds` if it beats the stored time. Returns true if it's a new best.
+    static func record(_ seconds: Int, for key: String) -> Bool {
+        let best = get(key)
+        guard best == 0 || seconds < best else { return false }
+        UserDefaults.standard.set(seconds, forKey: key)
+        return true
+    }
+
+    /// "1:05", or "1:02:05" past an hour.
+    static func format(_ seconds: Int) -> String {
+        let h = seconds / 3600, m = seconds / 60 % 60, s = seconds % 60
+        return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%d:%02d", m, s)
+    }
+}
+
 /// Key codes for keys that games use (layout-independent).
 enum Key {
     static let left: UInt16 = 123, right: UInt16 = 124, down: UInt16 = 125, up: UInt16 = 126
     static let space: UInt16 = 49, enter: UInt16 = 36, keypadEnter: UInt16 = 76
     static let w: UInt16 = 13, a: UInt16 = 0, s: UInt16 = 1, d: UInt16 = 2
+    static let delete: UInt16 = 51, forwardDelete: UInt16 = 117
 
     /// The typed letter, lowercased (for letter shortcuts like R, P, C).
     static func letter(_ event: NSEvent) -> String? { event.charactersIgnoringModifiers?.lowercased() }

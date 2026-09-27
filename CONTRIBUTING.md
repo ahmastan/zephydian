@@ -47,9 +47,10 @@ app/
 3. Register it with one line in `GameRegistry.all` (same file): id, name, SF Symbol and a "best score" label.
 4. Performance rules:
    - Real-time games must use the shared `GameLoop` and stop it in `pause()`. The app calls `pause()` whenever the panel hides or you leave the game. **Never** start your own always-running `Timer`.
-   - Turn-based and grid games shouldn't use a loop at all.
+   - Turn-based and grid games shouldn't use a loop at all. A game clock (like in Mines and Nines) is fine: run it with `GameLoop` only while the game is being played.
    - Prefer SwiftUI `Canvas`, shapes, and SF Symbols over large image assets.
 5. Make sure the game is fully playable with the keyboard, and add VoiceOver labels to its controls.
+6. Optional extras: `makeHeaderAccessory()` puts a menu in the header (difficulty, new game), and `undo()` handles ⌘Z. `MinesGame` and `NinesGame` show both.
 
 ## Pull requests
 

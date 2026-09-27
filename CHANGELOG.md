@@ -7,6 +7,12 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+- Three new games:
+  - **2048:** slide and merge numbers. Your board is saved between launches.
+  - **Mines:** clear the field without hitting a mine, in 3 difficulties with best times. The first click is always safe.
+  - **Nines:** 9×9 number-placement puzzles, freshly generated with exactly one solution, in 3 difficulties. Includes pencil marks, undo (⌘Z) and best times, and your puzzle is saved between launches.
+
 ## [0.1.0] - 2026-09-27
 
 First public release.
