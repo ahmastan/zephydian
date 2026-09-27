@@ -29,10 +29,10 @@
 ### Homebrew (recommended)
 
 ```sh
-brew install --cask ahmastan/tap/zephydian
+brew install ahmastan/tap/zephydian
 ```
 
-Update with `brew upgrade --cask zephydian`. Uninstall with `brew uninstall --cask --zap zephydian`.
+After that first install, plain `zephydian` works: update with `brew upgrade zephydian`, and uninstall with `brew uninstall --zap zephydian` (`--zap` also deletes your notes and settings).
 
 ### Download
 
