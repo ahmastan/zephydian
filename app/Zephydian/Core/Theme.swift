@@ -96,4 +96,6 @@ enum Tokens {
     static let edgeInset: CGFloat = 8
     static let fill = Color(nsColor: .quaternarySystemFill)
     static let fillHover = Color(nsColor: .tertiarySystemFill)
+    /// Round header buttons (back, pause, add). Fits the 44 pt header rows.
+    static let iconButtonSize: CGFloat = 28
 }

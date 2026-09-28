@@ -6,6 +6,7 @@ Thanks for your interest! Zephydian is a free, open-source utility and gaming co
 
 - Be kind. See the [Code of Conduct](CODE_OF_CONDUCT.md).
 - **Keep it light.** Zephydian's main promise is very low resource usage. New features must not add idle CPU usage, background timers, or network access.
+- **Liquid Glass for new UI.** New screens and controls follow Apple's Liquid Glass guidelines. Put glass only on floating controls (buttons, tab bars, overlays, toasts), never on content such as game boards or text. Use the helpers in `app/Zephydian/UI/GlassControls.swift` (`glassSurface`, `GlassGroup`, `glassIconButtonStyle`, `SegmentedControl`, `panelButtonStyle`), which also handle the Frosted style on macOS 14–15. Check your UI with Reduce Transparency and Increase Contrast turned on.
 - **No third-party trademarks.** Don't use names, logos, or artwork from existing games. Recreating general gameplay mechanics is fine, but give the game an original name.
 - Open an issue before starting a large change, so we can agree on the approach first.
 
