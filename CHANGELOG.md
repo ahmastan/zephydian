@@ -7,6 +7,9 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Changed
+- Zephydian is now described as a **utility and gaming corner**: the welcome screen says so, and notes that more utilities are coming soon.
+
 ## [0.2.0] - 2026-09-27
 
 ### Added

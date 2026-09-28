@@ -2,13 +2,15 @@
 
 # Zephydian
 
-**A breeze of a Mac app.** Hover over a screen corner and a tiny panel appears, holding a quick scratchpad and a handful of lightweight games.
+**Utility and gaming corner.** A free, open-source Mac app: hover over a screen corner and a panel appears with handy utilities and games. Quick Notes is the first utility, and more utilities are coming soon.
+
+**[zephydian.com](https://zephydian.com)**: try it right in your browser.
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-green)
 ![Status: in development](https://img.shields.io/badge/status-in%20development-orange)
 
-<!-- TODO: screenshot / GIF of the panel opening from a corner -->
+[![The Zephydian panel open over a Mac desktop, showing its games](assets/brand/preview.jpg)](https://zephydian.com)
 
 </div>
 
@@ -17,8 +19,9 @@
 ## Features
 
 - **Corner hover to open.** Pick any of the four screen corners. The panel appears when you hover and disappears when you're done.
-- **Quick Notes.** A tabbed scratchpad that autosaves as plain Markdown files you can open anywhere.
-- **Tiny games.** Snake, Stackr (block stacking), Five (5-letter word guess), Spokes (letter-wheel crosswords), Fleet (sea battle), Airship (top-down shooter), 2048 (slide and merge numbers), Mines (clear the minefield), and Nines (number-placement puzzles in three difficulties).
+- **Quick Notes.** The first utility: tabbed notes that autosave as plain Markdown files you can open anywhere.
+- **More utilities coming soon.** Notes is just the start. More everyday tools are on the way, free and open source like the rest.
+- **Games.** Snake, Stackr (block stacking), Five (5-letter word guess), Spokes (letter-wheel crosswords), Fleet (sea battle), Airship (top-down shooter), 2048 (slide and merge numbers), Mines (clear the minefield), and Nines (number-placement puzzles in three difficulties), with more games on the way.
 - **Make it yours.** Light, dark, or system appearance, accent color themes, Liquid Glass or frosted panel (macOS 26+), and a choice of menu bar icon (or none at all).
 - **Optional keyboard shortcut** to open the panel from anywhere.
 - **Featherweight.** Native Swift and SwiftUI. ~8 MB app, ~25 MB memory, and ~0.1% CPU when idle. Games pause the moment the panel hides.

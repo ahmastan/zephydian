@@ -1,20 +1,20 @@
-name: Game idea
-description: Suggest a new game for Zephydian
-labels: ["game-idea"]
+name: Utility idea
+description: Suggest a new utility (tool) for Zephydian
+labels: ["utility-idea"]
 body:
   - type: input
     id: name
     attributes:
-      label: Game
-      description: What is it, or what is it similar to?
-      placeholder: "Minesweeper-style"
+      label: Utility
+      description: What would it do?
+      placeholder: "Clipboard history"
     validations:
       required: true
   - type: textarea
     id: why
     attributes:
       label: Why would it fit Zephydian?
-      description: Zephydian games should be quick to start, playable in a small panel, keyboard-friendly, and very lightweight.
+      description: Zephydian utilities should open instantly, work in a small panel, be keyboard-friendly, and stay very lightweight. No network access.
     validations:
       required: true
   - type: checkboxes

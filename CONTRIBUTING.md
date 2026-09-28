@@ -1,6 +1,6 @@
 # Contributing to Zephydian
 
-Thanks for your interest! Zephydian is a small hobby project, so contributions of any size are welcome, from typo fixes to whole new games.
+Thanks for your interest! Zephydian is a free, open-source utility and gaming corner for the Mac. Contributions of any size are welcome, from typo fixes to new utilities and games. More utilities are coming soon, so ideas for them are especially welcome.
 
 ## Ground rules
 
@@ -30,7 +30,7 @@ app/
     ├── Core/         Corner trigger, floating panel, settings, themes
     ├── UI/           Shared views (root tabs, settings)
     ├── Features/
-    │   ├── Notes/    Quick Notes scratchpad
+    │   ├── Notes/    Quick Notes, the first utility
     │   └── Games/    Game protocol, registry, and one folder per game
     └── Resources/    Assets and word lists
 ```
@@ -62,4 +62,4 @@ app/
 
 ## Reporting bugs and suggesting ideas
 
-Use the issue templates: **Bug report**, **Feature request**, or **Game idea**. For security issues, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
+Use the issue templates: **Bug report**, **Feature request**, **Utility idea**, or **Game idea**. For security issues, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.

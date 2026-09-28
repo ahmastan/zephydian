@@ -18,8 +18,11 @@ struct OnboardingView: View {
                 .accessibilityHidden(true)
             Text("Welcome to Zephydian")
                 .font(.system(size: 20, weight: .bold))
-            Text("Tiny games and a scratchpad, one corner away.")
+            Text("Utility and gaming corner.")
                 .foregroundStyle(.secondary)
+            Text("Notes and games today, more utilities coming soon.")
+                .font(.system(size: 12))
+                .foregroundStyle(.tertiary)
 
             Text("Pick the corner that opens me:")
                 .font(.system(size: 13, weight: .medium))
