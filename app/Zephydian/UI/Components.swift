@@ -71,6 +71,7 @@ struct CornerPicker: View {
     var height: CGFloat = 84
     var dot: CGFloat = 20
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(SettingsStore.self) private var settings
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -78,9 +79,7 @@ struct CornerPicker: View {
             Rectangle().fill(.white.opacity(colorScheme == .dark ? 0.12 : 0.4)).frame(height: 8)
             ForEach(Corner.allCases) { c in
                 Button { corner = c } label: {
-                    Circle()
-                        .fill(corner == c ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(colorScheme == .dark ? 0.2 : 0.6)))
-                        .overlay(Circle().strokeBorder(.black.opacity(0.12), lineWidth: 1))
+                    dotView(selected: corner == c)
                         .frame(width: dot, height: dot)
                         .contentShape(Circle())
                 }
@@ -98,6 +97,18 @@ struct CornerPicker: View {
         .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.primary.opacity(0.1), lineWidth: 0.5))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Corner")
+    }
+
+    /// The selected corner is accent-tinted glass in Liquid Glass mode (solid accent in Frosted).
+    @ViewBuilder private func dotView(selected: Bool) -> some View {
+        if selected, settings.usesGlass {
+            Circle().fill(.clear)
+                .glassSurface(in: Circle(), tint: settings.accent.color, fallback: .tint)
+        } else {
+            Circle()
+                .fill(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(colorScheme == .dark ? 0.2 : 0.6)))
+                .overlay(Circle().strokeBorder(.black.opacity(0.12), lineWidth: 1))
+        }
     }
 
     private var wallpaper: [Color] {

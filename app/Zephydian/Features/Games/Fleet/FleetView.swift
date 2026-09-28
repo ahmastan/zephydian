@@ -281,8 +281,7 @@ struct FleetHeaderMenu: View {
             Text("\(game.difficulty.title) · \(game.scoreText)")
                 .font(.system(size: 13, weight: .semibold).monospacedDigit())
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
+        .headerMenuStyle()
         .foregroundStyle(.secondary)
         .help("Computer difficulty and new game")
     }

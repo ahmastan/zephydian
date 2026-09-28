@@ -3,6 +3,7 @@ import SwiftUI
 struct FiveView: View {
     let game: FiveGame
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let rows = ["QWERTYUIOP", "ASDFGHJKL", "↵ZXCVBNM⌫"]
 
@@ -167,10 +168,10 @@ struct FiveView: View {
         }
         .padding(.horizontal, 16).padding(.bottom, 18).padding(.top, 8)
         .frame(maxWidth: .infinity)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .glassSurface(in: RoundedRectangle(cornerRadius: 14, style: .continuous), fallback: .regularMaterial)
         .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
         .padding(.top, 60)
-        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.96)))
     }
 
     private func statCell(_ value: Int, _ label: String) -> some View {
@@ -207,8 +208,7 @@ struct FiveModeMenu: View {
             Text(game.scoreText)
                 .font(.system(size: 13, weight: .semibold).monospacedDigit())
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
+        .headerMenuStyle()
         .foregroundStyle(.secondary)
         .help("Switch between the daily word and practice")
         .accessibilityLabel("Mode: \(game.mode == .daily ? "Daily word" : "Practice")")

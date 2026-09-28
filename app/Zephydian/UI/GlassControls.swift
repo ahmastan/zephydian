@@ -121,6 +121,34 @@ private struct GlassIconButton: View {
 extension View {
     /// Round icon button for the panel's headers. See `GlassIconButtonStyle`.
     func glassIconButtonStyle() -> some View { buttonStyle(GlassIconButtonStyle()) }
+    /// Dropdown menus in the panel's headers (score, difficulty, mode). See `HeaderMenuStyle`.
+    func headerMenuStyle() -> some View { modifier(HeaderMenuStyle()) }
+    /// A `Menu` drawn as a round icon button (e.g. "…"), matching `glassIconButtonStyle()`.
+    func glassIconMenuStyle() -> some View {
+        menuStyle(.button).menuIndicator(.hidden).buttonStyle(GlassIconButtonStyle()).fixedSize()
+    }
+}
+
+// MARK: - Header menus
+
+/// A header dropdown: Apple's glass button (a capsule with the menu arrow) in Liquid Glass mode,
+/// a borderless menu in Frosted mode.
+private struct HeaderMenuStyle: ViewModifier {
+    @Environment(SettingsStore.self) private var settings
+
+    func body(content: Content) -> some View {
+        if #available(macOS 26, *), settings.usesGlass {
+            content
+                .menuStyle(.button)
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .fixedSize()
+        } else {
+            content
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+        }
+    }
 }
 
 // MARK: - Segmented control
@@ -133,10 +161,14 @@ struct SegmentedControl<Value: Hashable>: View {
     let title: (Value) -> String
     var height: CGFloat = 30
     var fontSize: CGFloat = 12
+    /// Liquid Glass mode only: the track itself is a glass bar (the panel's top tab bar),
+    /// with the glass bubble sliding on top of it.
+    var glassTrack = false
 
     @Environment(SettingsStore.self) private var settings
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var contrast
     @Namespace private var namespace
 
     var body: some View {
@@ -149,6 +181,16 @@ struct SegmentedControl<Value: Hashable>: View {
         }
         .padding(3)
         .background(track)
+        .overlay {
+            // Increase Contrast: give the faint track a visible edge.
+            if contrast == .increased {
+                if settings.usesGlass {
+                    Capsule().strokeBorder(.primary.opacity(0.35), lineWidth: 1)
+                } else {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(.primary.opacity(0.35), lineWidth: 1)
+                }
+            }
+        }
         .animation(reduceMotion ? .easeOut(duration: 0.1) : .spring(response: 0.32, dampingFraction: 0.78), value: selection)
         .accessibilityElement(children: .contain)
     }
@@ -188,7 +230,12 @@ struct SegmentedControl<Value: Hashable>: View {
     }
 
     @ViewBuilder private var track: some View {
-        if settings.usesGlass {
+        if #available(macOS 26, *), settings.usesGlass, glassTrack {
+            // Not interactive, so clicks go straight to the segments above it.
+            Capsule()
+                .fill(.clear)
+                .glassEffect(.regular, in: Capsule())
+        } else if settings.usesGlass {
             Capsule().fill(Color.primary.opacity(colorScheme == .dark ? 0.08 : 0.06))
         } else {
             RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Tokens.fillHover)

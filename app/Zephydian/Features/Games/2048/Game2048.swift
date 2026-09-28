@@ -323,8 +323,7 @@ struct Game2048HeaderMenu: View {
             Text(game.scoreText)
                 .font(.system(size: 13, weight: .semibold).monospacedDigit())
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
+        .headerMenuStyle()
         .foregroundStyle(.secondary)
         .help("Score and new game")
         .accessibilityLabel("Score \(game.score), best \(game.best)")

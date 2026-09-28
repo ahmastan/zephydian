@@ -181,8 +181,7 @@ struct NinesHeaderMenu: View {
             Text(game.scoreText)
                 .font(.system(size: 13, weight: .semibold).monospacedDigit())
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
+        .headerMenuStyle()
         .foregroundStyle(.secondary)
         .help("Start a new puzzle")
         .accessibilityLabel("\(game.difficulty.title), time \(BestTime.format(game.seconds))")

@@ -7,7 +7,17 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-28
+
 ### Changed
+- **Liquid Glass redesign** (macOS 26), following Apple's design guidelines. Glass is used for the controls that float above the content, while the content itself stays calm and readable:
+  - The top tab bar is a glass bar, with the selection bubble sliding on top.
+  - Games have round glass back and pause buttons and glass header menus, and the pause, win and lose screens are glass cards.
+  - In Notes, the active tab is glass tinted with your accent color, and the + and ⋯ buttons are round glass buttons.
+  - In Settings, the selected accent color, menu bar icon and corner sit on glass.
+  - The Frosted style (macOS 14–15, or when chosen in Settings) keeps its classic look.
+- Every game now has its own drawn icon, and game tiles lift slightly when you hover over them.
+- Better support for Reduce Motion and Increase Contrast.
 - Zephydian is now described as a **utility and gaming corner**: the welcome screen says so, and notes that more utilities are coming soon.
 
 ## [0.2.0] - 2026-09-27

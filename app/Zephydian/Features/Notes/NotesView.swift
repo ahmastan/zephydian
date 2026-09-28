@@ -52,32 +52,40 @@ struct NotesView: View {
             NoteTabStrip(activeID: notes.activeID) {
                 ForEach(notes.notes) { pill(for: $0) }
             }
-            Button { addNote() } label: {
-                Image(systemName: "plus").frame(width: 26, height: 26).contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-            .disabled(!notes.canAddNote)
-            .help(notes.canAddNote ? "New note (⌘T)" : "Up to \(NotesStore.maxNotes) notes")
-            .accessibilityLabel("New note")
-
-            Menu {
-                Toggle("Monospace Font", isOn: Binding(get: { settings.notesMonospaced }, set: { settings.notesMonospaced = $0 }))
-                Button("Reveal in Finder") { notes.revealInFinder() }
-                Divider()
-                if let note = notes.activeNote {
-                    Button("Rename “\(note.title)”…") { startRename(note) }
-                    Button("Delete “\(note.title)”…", role: .destructive) { notes.requestDelete(note.id) }
+            // Both buttons are glass controls, so they share one glass group.
+            GlassGroup(spacing: 4) {
+                HStack(spacing: 4) {
+                    addButton
+                    moreMenu
                 }
-            } label: {
-                Image(systemName: "ellipsis")
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .frame(width: 26, height: 26)
-            .accessibilityLabel("More options")
         }
+    }
+
+    private var addButton: some View {
+        Button { addNote() } label: {
+            Image(systemName: "plus")
+        }
+        .glassIconButtonStyle()
+        .disabled(!notes.canAddNote)
+        .help(notes.canAddNote ? "New note (⌘T)" : "Up to \(NotesStore.maxNotes) notes")
+        .accessibilityLabel("New note")
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            Toggle("Monospace Font", isOn: Binding(get: { settings.notesMonospaced }, set: { settings.notesMonospaced = $0 }))
+            Button("Reveal in Finder") { notes.revealInFinder() }
+            Divider()
+            if let note = notes.activeNote {
+                Button("Rename “\(note.title)”…") { startRename(note) }
+                Button("Delete “\(note.title)”…", role: .destructive) { notes.requestDelete(note.id) }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+        }
+        .glassIconMenuStyle()
+        .accessibilityLabel("More options")
     }
 
     @ViewBuilder
@@ -106,7 +114,12 @@ struct NotesView: View {
         .padding(.leading, 10)
         .padding(.trailing, showsClose ? 6 : 10)
         .frame(height: 24)
-        .background(Capsule().fill(isActive ? settings.accent.color.opacity(0.18) : Tokens.fill))
+        .background {
+            // The active tab is a glass capsule, like the selected top tab. Not interactive glass,
+            // so clicks, double-click to rename, drags and right-clicks all reach the tab.
+            if !isActive { Capsule().fill(hoveredID == note.id ? Tokens.fillHover : Tokens.fill) }
+        }
+        .modifier(ActiveTabGlass(isActive: isActive, accent: settings.accent.color))
         .contentShape(Capsule())
         .onTapGesture {
             notes.select(note.id)
@@ -195,5 +208,19 @@ struct NotesView: View {
     private func cancelRename() {
         renamingID = nil
         editorFocused = true
+    }
+}
+
+/// Puts the active note tab on accent-tinted glass (a tinted fill in Frosted mode).
+private struct ActiveTabGlass: ViewModifier {
+    let isActive: Bool
+    let accent: Color
+
+    func body(content: Content) -> some View {
+        if isActive {
+            content.glassSurface(in: Capsule(), tint: accent.opacity(0.3), fallback: accent.opacity(0.18))
+        } else {
+            content
+        }
     }
 }

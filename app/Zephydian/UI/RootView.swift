@@ -21,7 +21,7 @@ struct RootView: View {
                 VStack(spacing: 0) {
                     header
                     SegmentedControl(selection: $model.tab, options: AppModel.Tab.allCases, title: \.title,
-                                     height: 34, fontSize: 13)
+                                     height: 34, fontSize: 13, glassTrack: true)
                         .padding(.horizontal, 16)
                     .padding(.bottom, 12)
 

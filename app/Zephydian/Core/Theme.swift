@@ -98,4 +98,6 @@ enum Tokens {
     static let fillHover = Color(nsColor: .tertiarySystemFill)
     /// Round header buttons (back, pause, add). Fits the 44 pt header rows.
     static let iconButtonSize: CGFloat = 28
+    /// Glass cards floating over a game (pause, win, lose).
+    static let overlayRadius: CGFloat = 18
 }

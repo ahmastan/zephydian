@@ -4,6 +4,9 @@ struct SettingsView: View {
     @Environment(SettingsStore.self) private var settings
     @Environment(AppModel.self) private var model
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var selection
+
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var loginMessage: String?
 
@@ -135,23 +138,46 @@ struct SettingsView: View {
         }
     }
 
+    /// Springy slide for the glass selection bubbles (a quick fade with Reduce Motion).
+    private var selectionAnimation: Animation {
+        reduceMotion ? .easeOut(duration: 0.1) : .spring(response: 0.32, dampingFraction: 0.78)
+    }
+
     private var accentSwatches: some View {
         HStack(spacing: 6) {
             ForEach(AccentTheme.allCases) { theme in
+                let selected = settings.accent == theme
                 Button { settings.accent = theme } label: {
                     Circle()
                         .fill(theme.color)
                         .overlay(Circle().strokeBorder(.black.opacity(0.15), lineWidth: 0.5))
                         .frame(width: 18, height: 18)
                         .padding(3)
-                        .overlay(Circle().strokeBorder(settings.accent == theme ? theme.color : .clear, lineWidth: 2))
+                        .overlay {
+                            // Frosted: a ring in the swatch's color. Liquid Glass: a glass bubble behind it.
+                            if !settings.usesGlass {
+                                Circle().strokeBorder(selected ? theme.color : .clear, lineWidth: 2)
+                            }
+                        }
+                        .background { if selected { selectionBubble(Circle()) } }
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .help(theme.name)
                 .accessibilityLabel(theme.name)
-                .accessibilityAddTraits(settings.accent == theme ? .isSelected : [])
+                .accessibilityAddTraits(selected ? .isSelected : [])
             }
+        }
+        .animation(selectionAnimation, value: settings.accent)
+    }
+
+    /// The glass bubble behind the selected accent swatch or menu bar icon (Liquid Glass only).
+    /// It's a background, so it slides between options and never covers them.
+    @ViewBuilder private func selectionBubble<S: InsettableShape>(_ shape: S) -> some View {
+        if settings.usesGlass {
+            shape.fill(.clear)
+                .glassSurface(in: shape, interactive: true)
+                .matchedGeometryEffect(id: "bubble-\(S.self)", in: selection)
         }
     }
 
@@ -164,8 +190,14 @@ struct SettingsView: View {
                         .frame(width: 15, height: 15)
                         .font(.system(size: 13))
                         .frame(width: 26, height: 24)
-                        .foregroundStyle(selected ? AnyShapeStyle(.white) : AnyShapeStyle(.secondary))
-                        .background(RoundedRectangle(cornerRadius: 6).fill(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear)))
+                        .foregroundStyle(iconStyle(selected: selected))
+                        .background {
+                            if settings.usesGlass {
+                                if selected { selectionBubble(Capsule()) }
+                            } else {
+                                RoundedRectangle(cornerRadius: 6).fill(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear))
+                            }
+                        }
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -174,6 +206,12 @@ struct SettingsView: View {
                 .accessibilityAddTraits(selected ? .isSelected : [])
             }
         }
+        .animation(selectionAnimation, value: settings.menuBarIcon)
+    }
+
+    private func iconStyle(selected: Bool) -> AnyShapeStyle {
+        guard selected else { return AnyShapeStyle(.secondary) }
+        return settings.usesGlass ? AnyShapeStyle(.tint) : AnyShapeStyle(.white)
     }
 
     private func loginNote(_ text: String) -> some View {

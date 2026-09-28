@@ -35,13 +35,27 @@ extension GameSession {
 
 // MARK: - Registry
 
-/// A game's tile icon: an SF Symbol, or a custom drawing when no symbol fits the game.
+/// A game's tile icon: a custom drawing in the accent color (see `GameIconView`), or an SF Symbol.
 enum GameIcon {
     case symbol(String)
+    /// A snake winding toward a piece of food (Snake).
+    case snake
     /// A falling T-piece above a stack of blocks (Stackr).
     case fallingBlocks
+    /// Rows of letter tiles in three shades, the last row solved (Five).
+    case letterRows
+    /// Letters around a wheel, three of them joined by a swipe (Spokes).
+    case wheel
+    /// Two ships on a sea grid, plus a miss (Fleet).
+    case ships
+    /// A jet firing upward (Airship).
+    case jet
     /// A 2×2 grid of number tiles in rising shades (2048).
     case mergeTiles
+    /// Covered and revealed tiles with a flag (Mines).
+    case minefield
+    /// A 3×3 box with a few givens and a 9 (Nines).
+    case numberGrid
 }
 
 struct GameInfo: Identifiable {
@@ -57,23 +71,23 @@ struct GameInfo: Identifiable {
 /// Every game in Zephydian. Adding a game = one folder under Features/Games + one line here.
 enum GameRegistry {
     static let all: [GameInfo] = [
-        GameInfo(id: "snake", name: "Snake", icon: .symbol("point.bottomleft.forward.to.point.topright.scurvepath"),
+        GameInfo(id: "snake", name: "Snake", icon: .snake,
                  makeSession: { SnakeGame() }, stat: { BestScore.label(for: SnakeGame.bestKey) }),
         GameInfo(id: "stackr", name: "Stackr", icon: .fallingBlocks,
                  makeSession: { StackrGame() }, stat: { BestScore.label(for: StackrGame.bestKey) }),
-        GameInfo(id: "five", name: "Five", icon: .symbol("textformat.abc"),
+        GameInfo(id: "five", name: "Five", icon: .letterRows,
                  makeSession: { FiveGame() }, stat: { FiveGame.tileStat() }),
-        GameInfo(id: "wheel", name: "Spokes", icon: .symbol("circle.hexagongrid.fill"),
+        GameInfo(id: "wheel", name: "Spokes", icon: .wheel,
                  makeSession: { SpokesGame() }, stat: { "Level \(SpokesGame.savedLevel)" }),
-        GameInfo(id: "fleet", name: "Fleet", icon: .symbol("sailboat.fill"),
+        GameInfo(id: "fleet", name: "Fleet", icon: .ships,
                  makeSession: { FleetGame() }, stat: { FleetGame.tileStat }),
-        GameInfo(id: "airship", name: "Airship", icon: .symbol("airplane"),
+        GameInfo(id: "airship", name: "Airship", icon: .jet,
                  makeSession: { AirshipGame() }, stat: { BestScore.label(for: AirshipGame.bestKey) }),
         GameInfo(id: "2048", name: "2048", icon: .mergeTiles,
                  makeSession: { Game2048() }, stat: { BestScore.label(for: Game2048.bestKey) }),
-        GameInfo(id: "mines", name: "Mines", icon: .symbol("flag.fill"),
+        GameInfo(id: "mines", name: "Mines", icon: .minefield,
                  makeSession: { MinesGame() }, stat: { MinesGame.tileStat }),
-        GameInfo(id: "nines", name: "Nines", icon: .symbol("9.square.fill"),
+        GameInfo(id: "nines", name: "Nines", icon: .numberGrid,
                  makeSession: { NinesGame() }, stat: { NinesGame.tileStat }),
     ]
 
@@ -152,13 +166,35 @@ enum Key {
     static func letter(_ event: NSEvent) -> String? { event.charactersIgnoringModifiers?.lowercased() }
 }
 
-/// The dimmed card shown over a game when it's ready, paused or over.
+/// The card shown over a game when it's ready, paused or over: a floating glass card over a light
+/// dim in Liquid Glass mode, a frosted cover over the whole board in Frosted mode.
 struct GameOverlay<Actions: View>: View {
     let title: String
     var subtitle: String?
     @ViewBuilder var actions: Actions
 
+    @Environment(SettingsStore.self) private var settings
+
     var body: some View {
+        if #available(macOS 26, *), settings.usesGlass {
+            card
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .frame(maxWidth: 300)
+                .glassSurface(in: RoundedRectangle(cornerRadius: Tokens.overlayRadius, style: .continuous))
+                .padding(16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.black.opacity(0.18)))
+                .transition(.opacity)
+        } else {
+            card
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .transition(.opacity)
+        }
+    }
+
+    private var card: some View {
         VStack(spacing: 8) {
             Text(title).font(.system(size: 20, weight: .bold))
             if let subtitle {
@@ -169,26 +205,27 @@ struct GameOverlay<Actions: View>: View {
                 .padding(.top, 8)
         }
         .padding(16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .transition(.opacity)
     }
 }
 
 /// A short message bubble at the top of a game ("Not in word list", "Bonus word!"…).
-/// Dark bubble with light text in light mode, and the reverse in dark mode.
+/// A glass capsule in Liquid Glass mode. In Frosted mode, a dark bubble with light text in light
+/// mode, and the reverse in dark mode.
 struct GameToast: View {
     let text: String
+
+    @Environment(SettingsStore.self) private var settings
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Text(text)
             .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(Color(nsColor: .windowBackgroundColor))
+            .foregroundStyle(settings.usesGlass ? Color.primary : Color(nsColor: .windowBackgroundColor))
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
-            .background(Capsule().fill(Color(nsColor: .labelColor)))
+            .glassSurface(in: Capsule(), fallback: Color(nsColor: .labelColor))
             .padding(.top, 4)
-            .transition(.opacity.combined(with: .move(edge: .top)))
+            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             .accessibilityAddTraits(.isStaticText)
             .onAppear { NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested,
                                              userInfo: [.announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue]) }

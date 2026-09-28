@@ -10,35 +10,33 @@ struct GameScreen: View {
                 HStack(spacing: 6) {
                     Button { model.closeGame() } label: {
                         Image(systemName: "chevron.left")
-                            .font(.system(size: 14, weight: .semibold))
-                            .frame(width: 26, height: 26)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
+                    .glassIconButtonStyle()
                     .help("Back to games (Esc)")
                     .accessibilityLabel("Back to games")
 
                     Text(info.name).font(.system(size: 15, weight: .semibold))
                     Spacer()
-                    if let accessory = session.makeHeaderAccessory() {
-                        accessory
-                    } else {
-                        Text(session.scoreText)
-                            .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                            .accessibilityLabel("Score: \(session.scoreText)")
-                    }
+                    // The menu and pause button are both glass controls, so they share one glass group.
+                    GlassGroup(spacing: 6) {
+                        HStack(spacing: 6) {
+                            if let accessory = session.makeHeaderAccessory() {
+                                accessory
+                            } else {
+                                Text(session.scoreText)
+                                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                                    .accessibilityLabel("Score: \(session.scoreText)")
+                            }
 
-                    if session.showsPauseButton {
-                        Button { session.togglePause() } label: {
-                            Image(systemName: session.isRunning ? "pause.fill" : "play.fill")
-                                .frame(width: 26, height: 26)
-                                .contentShape(Rectangle())
+                            if session.showsPauseButton {
+                                Button { session.togglePause() } label: {
+                                    Image(systemName: session.isRunning ? "pause.fill" : "play.fill")
+                                }
+                                .glassIconButtonStyle()
+                                .accessibilityLabel(session.isRunning ? "Pause" : "Resume")
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel(session.isRunning ? "Pause" : "Resume")
                     }
                 }
                 .padding(.horizontal, 10)

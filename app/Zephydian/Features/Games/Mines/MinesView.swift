@@ -232,8 +232,7 @@ struct MinesHeaderMenu: View {
             Text(bestLabel)
                 .font(.system(size: 13, weight: .semibold).monospacedDigit())
         }
-        .menuStyle(.borderlessButton)
-        .fixedSize()
+        .headerMenuStyle()
         .foregroundStyle(.secondary)
         .help("Difficulty and new game")
         .accessibilityLabel("Difficulty: \(game.difficulty.title)")
