@@ -22,6 +22,11 @@ struct GameIconView: View {
             case .mergeTiles: MergeTilesIcon()
             case .minefield: MinefieldIcon()
             case .numberGrid: NumberGridIcon()
+            case .image(let image):
+                Image(nsImage: image)
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
             }
         }
         .foregroundStyle(.tint)

@@ -17,6 +17,9 @@ struct RootView: View {
             } else if model.isShowingGame {
                 GameScreen()
                     .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
+            } else if model.isShowingLibrary {
+                LibraryView()
+                    .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
             } else {
                 VStack(spacing: 0) {
                     header
@@ -41,6 +44,7 @@ struct RootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: settings.effectivePanelStyle.cornerRadius, style: .continuous))
         .animation(.easeOut(duration: 0.2), value: model.isShowingGame)
+        .animation(.easeOut(duration: 0.2), value: model.isShowingLibrary)
         .tint(settings.accent.color)
         .panelButtonStyle()
         .overlay {

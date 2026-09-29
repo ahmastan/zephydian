@@ -1,0 +1,52 @@
+# Checks packs on every pull request that touches them. On main, it also builds the changed packs,
+# signs a new catalog and uploads everything to the "packs" release, which is never marked "latest"
+# (the app's own releases stay "latest"). See docs/PACKS.md.
+name: packs
+
+on:
+  push:
+    branches: [main]
+    paths: ['packs/**', 'scripts/packs.swift', '.github/workflows/packs.yml']
+  pull_request:
+    paths: ['packs/**', 'scripts/packs.swift', '.github/workflows/packs.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to upload to the packs release
+
+concurrency:
+  group: packs-${{ github.ref }}
+  cancel-in-progress: false   # never interrupt a half-finished upload
+
+jobs:
+  packs:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check every pack
+        run: swift scripts/packs.swift check packs
+
+      - name: Build, sign and publish
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACK_SIGNING_KEY: ${{ secrets.PACK_SIGNING_KEY }}
+        run: |
+          if [ -z "$PACK_SIGNING_KEY" ]; then
+            echo "::error::The PACK_SIGNING_KEY secret isn't set, so packs can't be published."
+            exit 1
+          fi
+          if ! gh release view packs >/dev/null 2>&1; then
+            gh release create packs --title "Packs" --prerelease --latest=false \
+              --notes "Games and utilities you can install from Zephydian's Library. The app downloads these itself; there's nothing to download here by hand."
+          fi
+          mkdir -p previous
+          gh release download packs --pattern catalog.json --dir previous 2>/dev/null || true
+          swift scripts/packs.swift publish packs out \
+            --base-url "https://github.com/${{ github.repository }}/releases/download/packs" \
+            --previous previous/catalog.json
+          # Pack files first, the catalog last, so the catalog never points at a missing file.
+          shopt -s nullglob
+          files=(out/*.zpack out/*.png)
+          if [ ${#files[@]} -gt 0 ]; then gh release upload packs "${files[@]}" --clobber; fi
+          gh release upload packs out/catalog.json out/catalog.json.sig --clobber

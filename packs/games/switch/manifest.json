@@ -1,0 +1,12 @@
+{
+  "id": "switch",
+  "name": "Switch",
+  "kind": "game",
+  "version": "1.0.0",
+  "sdkVersion": 1,
+  "description": "Flip a light and its neighbours until the whole board is dark.",
+  "hint": "Click, or ←↑↓→ and Space, to flip · ⌘Z undo · R new board",
+  "pauseButton": false,
+  "tileStat": "none",
+  "whatsNew": "First release."
+}

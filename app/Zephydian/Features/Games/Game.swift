@@ -56,6 +56,8 @@ enum GameIcon {
     case minefield
     /// A 3×3 box with a few givens and a 9 (Nines).
     case numberGrid
+    /// A pack's own icon.png, drawn as a template in the accent color.
+    case image(NSImage)
 }
 
 struct GameInfo: Identifiable {
@@ -66,29 +68,44 @@ struct GameInfo: Identifiable {
     let makeSession: (() -> any GameSession)?
     /// Short line under the tile name, e.g. "Best 42".
     let stat: () -> String
+    /// One line for the Library.
+    var summary = ""
+    /// A small label on the tile's corner, e.g. "DEV" for a developer pack.
+    var badge: String? = nil
+    /// Start a fresh session every time the tile is opened (developer packs, so edits show up).
+    var reloadsOnOpen = false
 }
 
-/// Every game in Zephydian. Adding a game = one folder under Features/Games + one line here.
+/// Every game in Zephydian: the built-in ones, then packs. New games are packs (see docs/PACKS.md).
 enum GameRegistry {
-    static let all: [GameInfo] = [
+    /// The Games grid: installed built-in games, then packs. A pack with a built-in game's id takes
+    /// that game's place.
+    static var all: [GameInfo] {
+        let packs = PackLibrary.shared.games
+        let installed = InstalledGames.shared
+        return builtIn.compactMap { info in packs.first { $0.id == info.id } ?? (installed.contains(info.id) ? info : nil) }
+            + packs.filter { pack in !builtIn.contains { $0.id == pack.id } }
+    }
+
+    static let builtIn: [GameInfo] = [
         GameInfo(id: "snake", name: "Snake", icon: .snake,
-                 makeSession: { SnakeGame() }, stat: { BestScore.label(for: SnakeGame.bestKey) }),
+                 makeSession: { SnakeGame() }, stat: { BestScore.label(for: SnakeGame.bestKey) }, summary: "Eat, grow, and don't run into yourself."),
         GameInfo(id: "stackr", name: "Stackr", icon: .fallingBlocks,
-                 makeSession: { StackrGame() }, stat: { BestScore.label(for: StackrGame.bestKey) }),
+                 makeSession: { StackrGame() }, stat: { BestScore.label(for: StackrGame.bestKey) }, summary: "Stack falling blocks and clear full rows."),
         GameInfo(id: "five", name: "Five", icon: .letterRows,
-                 makeSession: { FiveGame() }, stat: { FiveGame.tileStat() }),
+                 makeSession: { FiveGame() }, stat: { FiveGame.tileStat() }, summary: "Guess the five-letter word in six tries."),
         GameInfo(id: "wheel", name: "Spokes", icon: .wheel,
-                 makeSession: { SpokesGame() }, stat: { "Level \(SpokesGame.savedLevel)" }),
+                 makeSession: { SpokesGame() }, stat: { "Level \(SpokesGame.savedLevel)" }, summary: "Make words from the letters around a wheel."),
         GameInfo(id: "fleet", name: "Fleet", icon: .ships,
-                 makeSession: { FleetGame() }, stat: { FleetGame.tileStat }),
+                 makeSession: { FleetGame() }, stat: { FleetGame.tileStat }, summary: "Find and sink the computer's hidden ships."),
         GameInfo(id: "airship", name: "Airship", icon: .jet,
-                 makeSession: { AirshipGame() }, stat: { BestScore.label(for: AirshipGame.bestKey) }),
+                 makeSession: { AirshipGame() }, stat: { BestScore.label(for: AirshipGame.bestKey) }, summary: "Fly, dodge and shoot through an endless sky."),
         GameInfo(id: "2048", name: "2048", icon: .mergeTiles,
-                 makeSession: { Game2048() }, stat: { BestScore.label(for: Game2048.bestKey) }),
+                 makeSession: { Game2048() }, stat: { BestScore.label(for: Game2048.bestKey) }, summary: "Slide and merge tiles to reach 2048."),
         GameInfo(id: "mines", name: "Mines", icon: .minefield,
-                 makeSession: { MinesGame() }, stat: { MinesGame.tileStat }),
+                 makeSession: { MinesGame() }, stat: { MinesGame.tileStat }, summary: "Clear the board without setting off a mine."),
         GameInfo(id: "nines", name: "Nines", icon: .numberGrid,
-                 makeSession: { NinesGame() }, stat: { NinesGame.tileStat }),
+                 makeSession: { NinesGame() }, stat: { NinesGame.tileStat }, summary: "Fill the grid with 1 to 9, no repeats."),
     ]
 
     static func info(for id: String?) -> GameInfo? { all.first { $0.id == id } }

@@ -39,6 +39,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         mouse.onMove = { [weak self] point in self?.panel.mouseMoved(to: point) }
 
+        // Packs: an update waits while its game is on screen, and installs as soon as you leave it.
+        let packs = PackManager.shared
+        packs.isInUse = { [weak self] id in self?.model.isShowingGame == true && self?.model.gameID == id }
+        packs.didChange = { [weak self] in
+            self?.model.discardHiddenPackSession()
+            PackLibrary.shared.refresh()
+        }
+        model.gameDidClose = { id in packs.packClosed(id) }
+        PackLibrary.shared.refresh()
+        packs.scheduleDailyCheck()
+
         hotKey.onPress = { [weak self] in
             guard let self, !self.model.isOnboarding else { return }
             self.panel.toggle()

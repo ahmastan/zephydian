@@ -9,6 +9,7 @@ struct SettingsView: View {
 
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var loginMessage: String?
+    @Environment(PackManager.self) private var packs
 
     private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
     private let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
@@ -97,6 +98,23 @@ struct SettingsView: View {
                         Toggle("Five high-contrast colors", isOn: $settings.fiveHighContrast)
                             .toggleStyle(.switch).labelsHidden().controlSize(.small)
                     }
+                }
+
+                SettingsSection(title: "Packs") {
+                    SettingsRow(label: "Check for updates daily") {
+                        Toggle("Check for updates daily", isOn: Binding(get: { packs.autoUpdate }, set: { packs.autoUpdate = $0 }))
+                            .toggleStyle(.switch).labelsHidden().controlSize(.small)
+                    }
+                    SettingsRow(label: packsStatus, isLast: true) {
+                        Button("Check now") { Task { await packs.checkForUpdates() } }
+                            .controlSize(.small)
+                            .disabled(packs.installed.isEmpty || packs.catalogState == .loading)
+                    }
+                    Text("Zephydian goes online only to install packs you choose and, while this is on, about once a day to update them. Nothing about you is sent.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, 10)
                 }
 
                 SettingsSection(title: "About") {
@@ -212,6 +230,19 @@ struct SettingsView: View {
     private func iconStyle(selected: Bool) -> AnyShapeStyle {
         guard selected else { return AnyShapeStyle(.secondary) }
         return settings.usesGlass ? AnyShapeStyle(.tint) : AnyShapeStyle(.white)
+    }
+
+    /// "Last checked: today, 14:02", or what went wrong with the last check.
+    private var packsStatus: String {
+        if packs.installed.isEmpty { return "No packs installed yet" }
+        switch packs.catalogState {
+        case .loading: return "Checking…"
+        case .offline: return "You're offline"
+        case .failed: return "Couldn't check. Try again later."
+        default:
+            guard let date = packs.lastChecked else { return "Not checked yet" }
+            return "Last checked: \(date.formatted(.relative(presentation: .named)))"
+        }
     }
 
     private func loginNote(_ text: String) -> some View {
