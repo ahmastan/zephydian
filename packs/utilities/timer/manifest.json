@@ -1,0 +1,11 @@
+{
+  "id": "timer",
+  "name": "Timer",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 2,
+  "description": "Countdowns, a stopwatch with laps and a focus mode, even with the panel closed.",
+  "symbol": "timer",
+  "capabilities": ["timers", "notifications"],
+  "whatsNew": "First release."
+}

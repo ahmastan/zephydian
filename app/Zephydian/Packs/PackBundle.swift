@@ -13,12 +13,18 @@ nonisolated struct PackManifest: Codable, Equatable {
     var pauseButton: Bool?
     var tileStat: String?
     var whatsNew: String?
+    /// An SF Symbol used as the tile icon (utilities).
+    var symbol: String?
+    /// What the pack may use beyond drawing and storage (see `PackCapability`).
+    var capabilities: [String]?
 }
 
 /// A pack on disk, ready to run: its folder, manifest and script.
 struct PackBundle {
     /// The newest SDK version this app can run.
-    static let sdkVersion = 1
+    static let sdkVersion = 2
+    /// Utilities arrived in SDK 2.
+    static let utilitySDK = 2
 
     let folder: URL
     let manifest: PackManifest
@@ -27,6 +33,10 @@ struct PackBundle {
     let isDev: Bool
 
     var id: String { manifest.id }
+
+    enum Kind: String { case game, utility }
+    /// Checked by `load`, so it's always one of the two.
+    var kind: Kind { Kind(rawValue: manifest.kind) ?? .game }
 
     enum LoadError: Error, CustomStringConvertible {
         case unreadable(String), invalid(String)
@@ -46,7 +56,11 @@ struct PackBundle {
         guard manifest.id == folder.lastPathComponent else {
             throw LoadError.invalid("the manifest id \"\(manifest.id)\" doesn't match the folder name")
         }
-        guard manifest.kind == "game" else { throw LoadError.invalid("only game packs are supported") }
+        guard let kind = Kind(rawValue: manifest.kind) else { throw LoadError.invalid("unknown kind \"\(manifest.kind)\"") }
+        guard kind == .game || manifest.sdkVersion >= utilitySDK else { throw LoadError.invalid("utilities need SDK \(utilitySDK) or newer") }
+        if let unknown = manifest.capabilities?.first(where: { PackCapability.named($0) == nil }) {
+            throw LoadError.invalid("needs a newer Zephydian (capability \(unknown))")
+        }
         guard manifest.sdkVersion <= sdkVersion else { throw LoadError.invalid("needs a newer Zephydian (SDK \(manifest.sdkVersion))") }
         guard let script = try? String(contentsOf: folder.appending(path: "main.js"), encoding: .utf8) else {
             throw LoadError.unreadable("main.js can't be read")
@@ -63,8 +77,11 @@ struct PackBundle {
         return url
     }
 
-    /// The tile icon: a template image, drawn in the accent color.
+    /// The tile icon: a template image, drawn in the accent color. A named SF Symbol wins over icon.png.
     func loadIcon() -> NSImage? {
+        if let symbol = manifest.symbol, let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) {
+            return image
+        }
         guard let image = NSImage(contentsOf: folder.appending(path: "icon.png")) else { return nil }
         image.isTemplate = true
         return image

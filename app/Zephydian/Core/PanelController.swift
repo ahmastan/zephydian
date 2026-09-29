@@ -61,7 +61,7 @@ final class PanelController: NSObject {
         self.notes = notes
         panel = FloatingPanel(size: Tokens.panelSize)
         let hostingView = NSHostingView(rootView: RootView().environment(settings).environment(model).environment(notes)
-            .environment(PackLibrary.shared).environment(PackManager.shared))
+            .environment(PackLibrary.shared).environment(PackManager.shared).environment(PackServices.shared))
         hostingView.sizingOptions = []
         hosting = hostingView
         super.init()
@@ -332,7 +332,7 @@ final class PanelController: NSObject {
     }
 
     private var autoHideAllowed: Bool {
-        if menuIsOpen { return false }
+        if menuIsOpen || PackServices.shared.holdsPanel { return false }
         return switch settings.autoHide {
         case .never: false
         case .always: true
@@ -377,7 +377,8 @@ final class PanelController: NSObject {
         guard clickMonitor == nil else { return }
         // Global monitors only see clicks in *other* apps, which is exactly "outside".
         clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
-            guard let self, !self.model.isOnboarding else { return }
+            // The color sampler and save dialogs work outside the panel: don't hide under them.
+            guard let self, !self.model.isOnboarding, !PackServices.shared.holdsPanel else { return }
             self.hide()
         }
     }
@@ -391,6 +392,7 @@ final class PanelController: NSObject {
 
     /// Returns true if the key was handled.
     private func handleKey(_ event: NSEvent) -> Bool {
+        if ShortcutRecording.isActive { return false }        // a shortcut field is taking the keys
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if event.keyCode == 53 { // Esc
             if model.isRenamingNote { return false } // let the rename field cancel itself
@@ -422,10 +424,15 @@ final class PanelController: NSObject {
         }
         guard !model.isOnboarding else { return false }
         switch key {
-        case "1", "2", "3", ",":
+        case "1", "2", "3", "4", ",":
             if model.isShowingGame { model.closeGame() }
             model.closeLibrary()
-            model.tab = key == "1" ? .games : key == "2" ? .notes : .settings
+            model.tab = switch key {
+            case "1": .games
+            case "2": .utilities
+            case "3": .notes
+            default: .settings
+            }
         case "w": hide()
         case "f" where model.isShowingLibrary && !model.isShowingGame: model.librarySearchRequest += 1
         case "z" where model.isShowingGame: return model.gameSession?.undo() ?? false

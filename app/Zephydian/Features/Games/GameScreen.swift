@@ -12,8 +12,8 @@ struct GameScreen: View {
                         Image(systemName: "chevron.left")
                     }
                     .glassIconButtonStyle()
-                    .help("Back to games (Esc)")
-                    .accessibilityLabel("Back to games")
+                    .help("Back to \(model.backDestination) (Esc)")
+                    .accessibilityLabel("Back to \(model.backDestination)")
 
                     Text(info.name).font(.system(size: 15, weight: .semibold))
                     Spacer()
@@ -45,13 +45,15 @@ struct GameScreen: View {
                 session.makeView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                Text(session.hint)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .padding(.horizontal, 12)
-                    .frame(height: 30)
+                if !session.hint.isEmpty {
+                    Text(session.hint)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .padding(.horizontal, 12)
+                        .frame(height: 30)
+                }
             }
         }
     }

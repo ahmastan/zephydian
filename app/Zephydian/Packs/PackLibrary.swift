@@ -58,20 +58,32 @@ final class PackLibrary {
         }
     }
 
-    /// Grid entries for the packs. A pack with a built-in game's id takes that game's place.
-    var games: [GameInfo] {
-        packs.map { bundle in
+    /// Games-grid entries for the game packs. A pack with a built-in game's id takes that game's place.
+    var games: [GameInfo] { tiles(.game) }
+
+    /// Utilities-tab entries.
+    var utilities: [GameInfo] { tiles(.utility) }
+
+    private func tiles(_ kind: PackBundle.Kind) -> [GameInfo] {
+        packs.filter { $0.kind == kind }.map { bundle in
             let manifest = bundle.manifest
             let bestScoreKey = "pack.\(bundle.id).best", bestTimeKey = "pack.\(bundle.id).bestTime"
+            let icon: GameIcon = manifest.symbol.map(GameIcon.symbol)
+                ?? icon(for: bundle).map(GameIcon.image) ?? .symbol("puzzlepiece.extension")
             return GameInfo(
-                id: bundle.id, name: manifest.name, icon: icon(for: bundle).map(GameIcon.image) ?? .symbol("puzzlepiece.extension"),
+                id: bundle.id, name: manifest.name, icon: icon,
                 makeSession: {
                     // Developer packs are read again from disk each time, so edits show up right away.
                     let fresh = bundle.isDev ? (try? PackBundle.load(from: bundle.folder, isDev: true)) ?? bundle : bundle
                     return PackSession(bundle: fresh)
                 },
                 stat: {
-                    switch manifest.tileStat {
+                    if kind == .utility {
+                        // A running service's live line ("On until 3:00 PM"), else the pack's own z.tile().
+                        return PackServices.shared.tileLine(for: bundle.id)
+                            ?? UserDefaults.standard.string(forKey: PackRuntime.tileKey(bundle.id)) ?? ""
+                    }
+                    return switch manifest.tileStat {
                     case "bestScore": BestScore.label(for: bestScoreKey)
                     case "bestTime": BestTime.get(bestTimeKey) > 0 ? "Best \(BestTime.format(BestTime.get(bestTimeKey)))" : "Not played"
                     default: ""

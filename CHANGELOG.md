@@ -7,6 +7,34 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-29
+
+### Added
+- A **Utilities** tab, between Games and Notes. Utilities are installed from the Library, like games; none come preinstalled. The Library now has a Games / Utilities filter.
+- **Pack SDK 2** for utilities: screens built from native controls (text fields, buttons, switches, sliders, lists), and capabilities such as copying to the clipboard or keeping the Mac awake. The Library shows what a pack uses and asks before installing it. See `docs/PACKS.md`.
+- Utilities that keep working in the background (Awake, running timers) turn the menu bar icon your accent color, and can be stopped from **Settings → Packs**. Clipboard recording shows there too, but doesn't change the icon.
+- The first utilities, each installed from the Library:
+  - **Passwords**: random passwords and passphrases from the Mac's secure random source; copies stay out of clipboard histories.
+  - **Text**: counts, case changes, line tools, JSON formatting, Base64 and URL encoding, SHA-256, UUIDs and placeholder text.
+  - **Calculator**: type whole calculations and unit conversions ("5 km in mi") with a live answer and history.
+  - **QR Code**: make a QR code offline, then copy it or save a PNG.
+  - **Awake**: keep your Mac awake for a while or until you turn it off.
+  - **Colors**: pick any color on screen and copy it as HEX, RGB, HSL, CSS or SwiftUI.
+- Zephydian can save a file where you choose in a save dialog (used by QR Code), and nowhere else.
+- More utilities:
+  - **Timer**: countdowns that keep running with the panel closed, a stopwatch with laps, and a focus mode, with a notification and sound when time's up.
+  - **System**: CPU, memory, disk, battery and network at a glance, measured only while you look.
+  - **Screenshot**: capture an area, a window or the whole screen, with a delay option, its own shortcut, the camera sound, the pointer if you want, and automatic copying. Zephydian's own selection shows a crosshair in your accent color. A preview card lets you copy, save, delete or close; screenshots save to Pictures/Screenshots or any folder you choose, as PNG or JPEG.
+  - **Clipboard**: a private history of the text and images you copy, with search, pins, ignored apps and its own shortcut. It skips passwords from password managers and is deleted when you remove it.
+
+### Changed
+- The app download is much smaller: release builds no longer include debug symbols.
+- Keyboard shortcuts are recorded: press any combination you like (the panel shortcut in Settings, and utilities' shortcuts). If macOS, most apps or another app already use it, a note under the field says so.
+- Tab shortcuts: ⌘1 Games, ⌘2 Utilities, ⌘3 Notes, ⌘4 Settings (⌘, still opens Settings).
+
+### Fixed
+- In the Frosted panel style (the only style on macOS 14 and 15), buttons such as Start, Play again and Install could freeze the panel.
+
 ## [0.4.0] - 2026-09-28
 
 ### Added

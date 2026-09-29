@@ -1,0 +1,10 @@
+{
+  "id": "passwords",
+  "name": "Passwords",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 2,
+  "description": "Make strong passwords and passphrases, just the way you need them.",
+  "symbol": "key.horizontal",
+  "whatsNew": "First release."
+}

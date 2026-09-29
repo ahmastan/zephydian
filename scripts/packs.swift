@@ -10,15 +10,23 @@
 //   swift scripts/packs.swift verify catalog.json catalog.json.sig PUBLIC_KEY
 //
 // publish reads the private key from the PACK_SIGNING_KEY environment variable (base64).
+import AppKit
 import CryptoKit
 import Foundation
 import JavaScriptCore
 
-let sdkVersion = 1                       // the newest SDK version the tools (and app) know
+let sdkVersion = 2                       // the newest SDK version the tools (and app) know
+let utilitySDK = 2                       // utilities need SDK 2 or newer
 let maxPackBytes = 5 * 1024 * 1024
 let maxScriptBytes = 512 * 1024
 let kinds = ["games": "game", "utilities": "utility"]
 let assetExtensions: Set<String> = ["png", "json", "txt"]
+/// What packs may declare in "capabilities" (the app shows each one before install).
+let knownCapabilities: Set<String> = [
+    "clipboard.write", "clipboard.read", "power.awake", "notifications", "screen.capture",
+    "color.sample", "files.save", "windows", "system.stats", "timers", "shortcut",
+]
+let capabilitySDK = 2                    // capabilities arrived in SDK 2
 
 struct Failure: Error, CustomStringConvertible { let description: String }
 func fail(_ message: String) -> Never {
@@ -39,6 +47,9 @@ struct Manifest: Codable {
     var pauseButton: Bool?
     var tileStat: String?
     var whatsNew: String?
+    /// An SF Symbol name used as the icon (icon.png is then made from it when the pack has none).
+    var symbol: String?
+    var capabilities: [String]?
 }
 
 /// "1.2.3" → [1, 2, 3]; nil if it isn't three whole numbers.
@@ -55,6 +66,9 @@ struct Pack {
     let manifest: Manifest
     let files: [String]           // relative paths, sorted
     let sourceHash: String        // fingerprint of the sources, to spot changes without a version bump
+    let icon: Data                // icon.png: the pack's own, or drawn from its SF Symbol
+    /// True when icon.png was drawn from `symbol` (the zpack gets a copy).
+    let iconIsGenerated: Bool
 }
 
 func pngSize(_ data: Data) -> (Int, Int)? {
@@ -90,7 +104,7 @@ func checkPack(_ folder: URL) throws -> Pack {
         files.append(rel)
     }
     files.sort()
-    for required in ["manifest.json", "main.js", "icon.png"] where !files.contains(required) {
+    for required in ["manifest.json", "main.js"] where !files.contains(required) {
         throw problem("\(required) is missing")
     }
     if total > maxPackBytes { throw problem("the pack is \(total / 1024) KB; the limit is \(maxPackBytes / 1024) KB") }
@@ -107,19 +121,37 @@ func checkPack(_ folder: URL) throws -> Pack {
     }
     let expectedKind = kinds[folder.deletingLastPathComponent().lastPathComponent]
     if m.kind != expectedKind { throw problem("kind must be \"\(expectedKind ?? "?")\" for a pack in this folder") }
-    if m.kind != "game" { throw problem("SDK \(sdkVersion) supports games only") }
+    if m.kind == "utility" && m.sdkVersion < utilitySDK { throw problem("utilities need sdkVersion \(utilitySDK) or newer") }
     if m.name.trimmingCharacters(in: .whitespaces).isEmpty || m.name.count > 24 { throw problem("name must be 1–24 characters") }
     if m.kind == "game" && m.name.contains(" ") { throw problem("game names are a single word") }
     if parseVersion(m.version) == nil { throw problem("version must look like 1.0.0") }
     if !(1...sdkVersion).contains(m.sdkVersion) { throw problem("sdkVersion must be between 1 and \(sdkVersion)") }
     if m.description.isEmpty || m.description.count > 90 { throw problem("description must be 1–90 characters") }
+    if let caps = m.capabilities {
+        if m.sdkVersion < capabilitySDK { throw problem("capabilities need sdkVersion \(capabilitySDK) or newer") }
+        if let unknown = caps.first(where: { !knownCapabilities.contains($0) }) {
+            throw problem("unknown capability \"\(unknown)\" (known: \(knownCapabilities.sorted().joined(separator: ", ")))")
+        }
+        if Set(caps).count != caps.count { throw problem("a capability is listed twice") }
+    }
     if let s = m.tileStat, !["bestScore", "bestTime", "none"].contains(s) {
         throw problem("tileStat must be bestScore, bestTime or none")
     }
 
-    // icon.png: 64 × 64
-    let icon = try Data(contentsOf: folder.appending(path: "icon.png"))
-    guard let (w, h) = pngSize(icon), w == 64, h == 64 else { throw problem("icon.png must be a 64 × 64 PNG") }
+    // The icon: icon.png (64 × 64), or an SF Symbol drawn into one.
+    let icon: Data
+    if files.contains("icon.png") {
+        icon = try Data(contentsOf: folder.appending(path: "icon.png"))
+        guard let (w, h) = pngSize(icon), w == 64, h == 64 else { throw problem("icon.png must be a 64 × 64 PNG") }
+    } else if let symbol = m.symbol {
+        guard let drawn = symbolPNG(symbol) else { throw problem("\"\(symbol)\" isn't an SF Symbol on this Mac") }
+        icon = drawn
+    } else {
+        throw problem("icon.png is missing (or name an SF Symbol with \"symbol\" in manifest.json)")
+    }
+    if let symbol = m.symbol, NSImage(systemSymbolName: symbol, accessibilityDescription: nil) == nil {
+        throw problem("\"\(symbol)\" isn't an SF Symbol on this Mac")
+    }
 
     // main.js: size and syntax (checked without running it)
     let script = try Data(contentsOf: folder.appending(path: "main.js"))
@@ -144,7 +176,28 @@ func checkPack(_ folder: URL) throws -> Pack {
         hasher.update(data: bytes)
     }
     let sourceHash = hasher.finalize().map { String(format: "%02x", $0) }.joined()
-    return Pack(folder: folder, manifest: m, files: files, sourceHash: sourceHash)
+    return Pack(folder: folder, manifest: m, files: files, sourceHash: sourceHash,
+                icon: icon, iconIsGenerated: !files.contains("icon.png"))
+}
+
+/// Draws an SF Symbol, black on transparent and centered, into a 64 × 64 PNG (the app tints it).
+func symbolPNG(_ name: String) -> Data? {
+    guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+        .withSymbolConfiguration(.init(pointSize: 40, weight: .regular)),
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 64, pixelsHigh: 64, bitsPerSample: 8,
+                                   samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                   colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return nil }
+    rep.size = NSSize(width: 64, height: 64)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    let size = symbol.size, scale = min(56 / size.width, 56 / size.height, 1.4)
+    let w = size.width * scale, h = size.height * scale
+    let rect = NSRect(x: (64 - w) / 2, y: (64 - h) / 2, width: w, height: h)
+    symbol.draw(in: rect)
+    NSColor.black.set()
+    rect.fill(using: .sourceAtop)
+    NSGraphicsContext.restoreGraphicsState()
+    return rep.representation(using: .png, properties: [:])
 }
 
 func packFolders(in root: URL) -> [URL] {
@@ -184,6 +237,10 @@ func buildZpack(_ pack: Pack, into out: URL) throws -> URL {
         try fm.createDirectory(at: dst.deletingLastPathComponent(), withIntermediateDirectories: true)
         try fm.copyItem(at: pack.folder.appending(path: rel), to: dst)
     }
+    if pack.iconIsGenerated {
+        try fm.createDirectory(at: stage, withIntermediateDirectories: true)
+        try pack.icon.write(to: stage.appending(path: "icon.png"))
+    }
     try fm.createDirectory(at: out, withIntermediateDirectories: true)
     let file = out.appending(path: "\(pack.manifest.id)-\(pack.manifest.version).zpack")
     try? fm.removeItem(at: file)
@@ -204,6 +261,8 @@ struct CatalogEntry: Codable {
     var iconURL: String
     var iconSha256: String
     var sourceHash: String
+    var symbol: String?
+    var capabilities: [String]?
 }
 
 struct Catalog: Codable {
@@ -314,13 +373,14 @@ case "publish":
             let file = try buildZpack(pack, into: out)
             let data = try Data(contentsOf: file)
             let iconName = "\(m.id)-\(m.version).png"
-            let icon = try Data(contentsOf: folder.appending(path: "icon.png"))
+            let icon = pack.icon
             try icon.write(to: out.appending(path: iconName))
             entries.append(CatalogEntry(
                 id: m.id, name: m.name, kind: m.kind, version: m.version, sdkVersion: m.sdkVersion,
                 description: m.description, whatsNew: m.whatsNew, size: data.count,
                 url: "\(baseURL)/\(file.lastPathComponent)", sha256: sha256Hex(data),
-                iconURL: "\(baseURL)/\(iconName)", iconSha256: sha256Hex(icon), sourceHash: pack.sourceHash))
+                iconURL: "\(baseURL)/\(iconName)", iconSha256: sha256Hex(icon), sourceHash: pack.sourceHash,
+                symbol: m.symbol, capabilities: m.capabilities))
             print("new  \(m.id) \(m.version)")
         }
         let now = Date()

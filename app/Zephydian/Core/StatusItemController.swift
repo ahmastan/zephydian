@@ -16,9 +16,37 @@ final class StatusItemController: NSObject {
         button.setAccessibilityLabel("Zephydian")
     }
 
+    private var icon: MenuBarIcon?
+    private var serviceColor: NSColor?
+
+    /// While a utility's background service runs (keep awake…), the jet takes the accent color.
+    /// The menu bar always draws template images in its own color (tints are ignored), so the jet
+    /// is swapped for a colored copy, and the template comes back when the last service stops.
+    func setServiceActive(_ active: Bool, color: NSColor) {
+        serviceColor = active ? color : nil
+        statusItem.button?.setAccessibilityLabel(active ? "Zephydian, a utility is running" : "Zephydian")
+        updateImage()
+    }
+
     func apply(icon: MenuBarIcon) {
+        self.icon = icon
         statusItem.isVisible = icon != .hidden
-        statusItem.button?.image = icon.menuBarImage
+        updateImage()
+    }
+
+    private func updateImage() {
+        guard let template = icon?.menuBarImage else { statusItem.button?.image = nil; return }
+        guard let color = serviceColor else { statusItem.button?.image = template; return }
+        // Drawn when shown, so the accent's light or dark shade follows the menu bar's look.
+        let colored = NSImage(size: template.size, flipped: false) { rect in
+            template.draw(in: rect)
+            color.set()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
+        colored.isTemplate = false
+        colored.accessibilityDescription = template.accessibilityDescription
+        statusItem.button?.image = colored
     }
 
     func setHighlighted(_ highlighted: Bool) {

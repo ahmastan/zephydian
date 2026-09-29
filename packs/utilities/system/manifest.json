@@ -1,0 +1,11 @@
+{
+  "id": "system",
+  "name": "System",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 2,
+  "description": "CPU, memory, disk, battery and network at a glance, measured only while you look.",
+  "symbol": "gauge.with.dots.needle.50percent",
+  "capabilities": ["system.stats"],
+  "whatsNew": "First release."
+}

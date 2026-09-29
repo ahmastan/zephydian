@@ -6,7 +6,7 @@ import Observation
 @Observable
 final class AppModel {
     enum Tab: String, CaseIterable, Identifiable {
-        case games, notes, settings
+        case games, utilities, notes, settings
         var id: Self { self }
         var title: String { rawValue.capitalized }
     }
@@ -44,7 +44,19 @@ final class AppModel {
     /// Arrow keys and Enter for the Library's rows (set by the Library while it's showing).
     @ObservationIgnored var libraryKeyHandler: ((NSEvent) -> Bool)?
 
-    func openLibrary() { isShowingLibrary = true }
+    /// Which kind of pack the Library lists. Set by the tab that opened it.
+    var libraryFilter: PackBundle.Kind = .game
+
+    func openLibrary(_ filter: PackBundle.Kind = .game) {
+        libraryFilter = filter
+        isShowingLibrary = true
+    }
+
+    /// Where the back button of a game, utility or the Library goes, for its help text.
+    var backDestination: String {
+        if isShowingGame && isShowingLibrary { return "the Library" }
+        return tab == .utilities ? "utilities" : "games"
+    }
     func closeLibrary() { isShowingLibrary = false }
 
     /// Stops Smart auto-hide while a game is open.

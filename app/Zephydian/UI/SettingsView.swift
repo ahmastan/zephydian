@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
     @State private var loginMessage: String?
     @Environment(PackManager.self) private var packs
+    @Environment(PackServices.self) private var services
 
     private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
     private let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
@@ -30,17 +31,11 @@ struct SettingsView: View {
                         MillisecondSlider(value: $settings.dwellMs, range: 0...600, step: 50, label: "Corner delay")
                     }
                     SettingsRow(label: "Keyboard shortcut") {
-                        Picker("Keyboard shortcut", selection: $settings.globalShortcut) {
-                            ForEach(GlobalShortcut.allCases) { Text($0.title).tag($0) }
-                        }
-                        .labelsHidden().fixedSize().controlSize(.small)
+                        ShortcutRecorder(shortcut: settings.panelShortcut) { settings.panelShortcut = $0 }
                     }
-                    if !model.shortcutAvailable {
-                        Label("Another app already uses this shortcut. Pick a different one.", systemImage: "exclamationmark.triangle.fill")
-                            .font(.system(size: 11)).foregroundStyle(.orange)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.bottom, 8)
-                    }
+                    ShortcutWarning(text: ShortcutConflicts.warning(for: settings.panelShortcut, registered: model.shortcutAvailable,
+                                                                    owner: "panel", panel: settings.panelShortcut))
+                        .padding(.bottom, 8)
                     SettingsRow(label: "Display", isLast: true) {
                         displayPicker
                     }
@@ -101,6 +96,13 @@ struct SettingsView: View {
                 }
 
                 SettingsSection(title: "Packs") {
+                    // Background services of utilities (keep awake…), each with a Stop button.
+                    ForEach(services.running) { service in
+                        SettingsRow(label: "\(service.packName) · \(service.detail)") {
+                            Button("Stop") { services.stop(service.id) }.controlSize(.small)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
                     SettingsRow(label: "Check for updates daily") {
                         Toggle("Check for updates daily", isOn: Binding(get: { packs.autoUpdate }, set: { packs.autoUpdate = $0 }))
                             .toggleStyle(.switch).labelsHidden().controlSize(.small)
