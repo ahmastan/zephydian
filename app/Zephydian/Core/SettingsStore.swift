@@ -81,20 +81,6 @@ nonisolated enum PanelStyle: String, CaseIterable, Identifiable {
 }
 
 /// Optional system-wide shortcut to open the panel. Presets avoid clashing with common app shortcuts.
-nonisolated enum GlobalShortcut: String, CaseIterable, Identifiable {
-    case off, optionSpace, controlOptionSpace, controlOptionZ
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .off: "Off"
-        case .optionSpace: "⌥ Space"
-        case .controlOptionSpace: "⌃⌥ Space"
-        case .controlOptionZ: "⌃⌥ Z"
-        }
-    }
-}
-
 // MARK: - Store
 
 /// All user preferences, saved to UserDefaults as soon as they change.
@@ -115,7 +101,8 @@ final class SettingsStore {
     var fiveHighContrast: Bool { didSet { defaults.set(fiveHighContrast, forKey: "fiveHighContrast") } }
     var hasCompletedOnboarding: Bool { didSet { defaults.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding") } }
     var panelStyle: PanelStyle { didSet { defaults.set(panelStyle.rawValue, forKey: "panelStyle") } }
-    var globalShortcut: GlobalShortcut { didSet { defaults.set(globalShortcut.rawValue, forKey: "globalShortcut") } }
+    /// The panel's global shortcut, recorded by the person (nil = none).
+    var panelShortcut: KeyShortcut? { didSet { defaults.set(try? JSONEncoder().encode(panelShortcut), forKey: "panelShortcut") } }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -138,7 +125,18 @@ final class SettingsStore {
         fiveHighContrast = defaults.bool(forKey: "fiveHighContrast")
         hasCompletedOnboarding = defaults.bool(forKey: "hasCompletedOnboarding")
         panelStyle = value("panelStyle", .glass)
-        globalShortcut = value("globalShortcut", .off)
+        // Worked out first and assigned once: in an @Observable class even this assignment saves.
+        var shortcut = defaults.data(forKey: "panelShortcut").flatMap { try? JSONDecoder().decode(KeyShortcut?.self, from: $0) } ?? nil
+        // Before any key could be recorded there were three choices; keep the one picked.
+        if defaults.object(forKey: "panelShortcut") == nil {
+            switch defaults.string(forKey: "globalShortcut") {
+            case "optionSpace": shortcut = KeyShortcut(keyCode: 49, modifiers: .option, key: "Space")
+            case "controlOptionSpace": shortcut = KeyShortcut(keyCode: 49, modifiers: [.control, .option], key: "Space")
+            case "controlOptionZ": shortcut = KeyShortcut(keyCode: 6, modifiers: [.control, .option], key: "Z")
+            default: break
+            }
+        }
+        panelShortcut = shortcut
     }
 
     /// The style actually in use: Liquid Glass needs macOS 26 or later.

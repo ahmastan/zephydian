@@ -265,7 +265,7 @@ private struct ProminentButtonStyle: ViewModifier {
         if #available(macOS 26, *), settings.usesGlass {
             content.buttonStyle(.glassProminent)
         } else {
-            content.prominentButtonStyle()
+            content.buttonStyle(.borderedProminent)
         }
     }
 }

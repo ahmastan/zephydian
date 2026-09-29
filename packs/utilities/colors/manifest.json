@@ -1,0 +1,11 @@
+{
+  "id": "colors",
+  "name": "Colors",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 2,
+  "description": "Pick any color on your screen and copy it as HEX, RGB, HSL, CSS or SwiftUI.",
+  "symbol": "eyedropper",
+  "capabilities": ["color.sample"],
+  "whatsNew": "First release."
+}

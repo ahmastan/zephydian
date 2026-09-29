@@ -1,0 +1,11 @@
+{
+  "id": "screenshot",
+  "name": "Screenshot",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 2,
+  "description": "Capture an area, a window or the whole screen, then copy, save or edit it.",
+  "symbol": "camera.viewfinder",
+  "capabilities": ["screen.capture", "files.save", "shortcut"],
+  "whatsNew": "First release."
+}

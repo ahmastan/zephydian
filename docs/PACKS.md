@@ -2,7 +2,7 @@
 
 New games and utilities come to Zephydian as **packs**. People install them from the **Library** inside the panel, and can remove them again. A pack is a small JavaScript program plus its data. Zephydian runs it with Apple's built-in JavaScriptCore and draws it natively, so a pack looks and feels like the rest of the app, Liquid Glass included.
 
-This guide covers **SDK version 1**, which supports games. Utilities, and the extra abilities they need (clipboard, notifications and so on), come in a later SDK version.
+This guide covers **SDK version 2**. Version 1 brought games; version 2 adds **utilities**, whose screens are built from native controls, and **capabilities** for the few things a utility needs beyond its own screen (the clipboard, keeping the Mac awake and so on).
 
 - [What a pack can and can't do](#what-a-pack-can-and-cant-do)
 - [Folder layout](#folder-layout)
@@ -11,6 +11,8 @@ This guide covers **SDK version 1**, which supports games. Utilities, and the ex
 - [The `z` API](#the-z-api)
 - [Drawing](#drawing)
 - [Colors](#colors)
+- [Utilities (SDK 2)](#utilities-sdk-2)
+- [Capabilities](#capabilities)
 - [A complete example](#a-complete-example)
 - [Testing your pack](#testing-your-pack)
 - [Submitting a pack](#submitting-a-pack)
@@ -19,6 +21,8 @@ This guide covers **SDK version 1**, which supports games. Utilities, and the ex
 ## What a pack can and can't do
 
 A pack can draw on its game area, react to keys and clicks, run a game loop while it's on screen, show the standard pause/win/lose cards and message bubbles, add one menu to the header, and save a little data of its own.
+
+A utility builds its screen from native controls (text, fields, buttons, switches, lists) instead of drawing it, and may use the **capabilities** it declares in its manifest, which people see before they install it.
 
 A pack **can't** do anything else. It has no network, no files, no access to notes, to other packs or to the rest of the Mac, and no `setTimeout`, `fetch` or `require`. That isn't a policy the app enforces afterwards: JavaScriptCore simply has none of these, and the SDK never adds them. That's what makes a pack safe to install.
 
@@ -39,12 +43,15 @@ packs/
 │       ├── main.js
 │       ├── icon.png       64×64, black on transparent (drawn in the user's accent color)
 │       └── assets/        optional images (PNG) and data files (JSON, TXT)
-└── utilities/             (later SDK versions)
+└── utilities/
+    └── notepad/           the same layout; a utility may use an SF Symbol instead of icon.png
 ```
 
 `swift scripts/packs.swift check packs` checks every pack: the file list, the manifest, the icon size, the limits and the JavaScript syntax. Run it before opening a pull request.
 
 `swift scripts/packs.swift build packs/games/lights` turns the folder into `dist/packs/lights-1.0.0.zpack`, the single file people download (a zip with a different extension). You don't need to build it yourself: the release workflow builds and publishes every pack.
+
+A utility can name an SF Symbol with `symbol` in its manifest instead of drawing an `icon.png`; the build draws the icon from the symbol.
 
 Only these files are allowed: `manifest.json`, `main.js`, `icon.png`, and PNG, JSON or TXT files under `assets/`. Symbolic links aren't allowed.
 
@@ -70,8 +77,8 @@ Only these files are allowed: `manifest.json`, `main.js`, `icon.png`, and PNG, J
 | Field | Meaning |
 | --- | --- |
 | `id` | Lowercase letters, digits and `-`, and the same as the folder name. It never changes: saved data is kept under it. |
-| `name` | Shown on the tile and in the Library. **Games use a single original word** that isn't a trademarked title. |
-| `kind` | `"game"` (`"utility"` arrives with a later SDK version). |
+| `name` | Shown on the tile and in the Library. **Games use a single original word** that isn't a trademarked title. Utilities use a plain name that says what they do ("Calculator", "QR Code"). |
+| `kind` | `"game"` or `"utility"`. Utilities need `sdkVersion` 2. |
 | `version` | `major.minor.patch`. Raise it with every change, or the update won't be published. |
 | `sdkVersion` | The SDK version the pack needs. An app with an older SDK shows the pack as "Update Zephydian to install this". |
 | `description` | One line for the Library. |
@@ -79,6 +86,8 @@ Only these files are allowed: `manifest.json`, `main.js`, `icon.png`, and PNG, J
 | `pauseButton` | `true` for real-time games, to show the header's pause button. |
 | `tileStat` | What the tile shows under the name: `"bestScore"`, `"bestTime"` or `"none"`. |
 | `whatsNew` | A short line shown in the Library after an update. |
+| `symbol` | Optional. An SF Symbol name (for example `"doc.on.clipboard"`) used as the icon instead of `icon.png`. Meant for utilities. |
+| `capabilities` | Optional (SDK 2). What the pack uses beyond its own screen and storage, such as `["clipboard.write"]`. See [Capabilities](#capabilities). |
 
 ## The game object
 
@@ -194,6 +203,106 @@ Anywhere a color is expected, you can use:
 
 Keep text contrast at least 4.5:1, and don't use color alone to show state (for example, add a mark or a pattern too).
 
+## Utilities (SDK 2)
+
+A utility hands the SDK an object with a `view()` function. Instead of drawing, `view()` **returns the screen** as `z.ui` controls, and Zephydian draws them with native Mac controls (Liquid Glass buttons, real text fields, switches and so on). Whenever the utility handles an event, its timer fires or a control is used, Zephydian calls `view()` again and updates only what changed. Keep your state in variables and describe the screen from them.
+
+```js
+zephydian.utility({
+  start()  { },          // once, when the utility opens
+  view()   { return z.ui.text("Hello"); },   // required: the screen, from z.ui controls
+  key(e)   { },          // a key pressed while no text field has the cursor; return true if used
+  pause()  { },          // the panel hid
+  resume() { },          // it's back on screen
+});
+```
+
+Utilities have no pause button or cards; `z.menu()`, `z.toast()`, `z.hint()`, `z.storage`, `z.after()` and `z.loop` work as they do for games. The header shows the utility's name, and the hint line only when you set one.
+
+### Controls
+
+| Control | What it is |
+| --- | --- |
+| `z.ui.text(text, { style, align, selectable, color })` | A line or paragraph. `style`: `"body"` (default), `"title"`, `"large"` (a big number, like a result), `"secondary"`, `"caption"`, `"mono"`. `align`: `"left"`, `"center"`, `"right"`. `selectable: true` lets people select and copy it. |
+| `z.ui.field({ value, placeholder, onChange(text), onSubmit(text), multiline, lines, mono })` | A text field. `onChange` gets every edit; `onSubmit` gets Enter. Set `value` from your state: the field keeps the cursor where it is while you type. `multiline: true` with `lines` (1–30) for bigger text. |
+| `z.ui.button(label, onPress, { symbol, style, disabled })` | A button. `style`: `"plain"` (default), `"prominent"` (the main action) or `"destructive"`. `symbol` adds an SF Symbol. |
+| `z.ui.toggle(label, value, onChange(on))` | A switch. |
+| `z.ui.slider({ value, min, max, step, onChange(value) })` | A slider. With `step`, values snap to it. |
+| `z.ui.segmented(options, selected, onChange(index))` | A few choices side by side. |
+| `z.ui.picker(label, options, selected, onChange(index))` | A pop-up menu for longer lists of choices. |
+| `z.ui.copy(text, { label, concealed })` | A Copy button. Copying from a button someone clicks needs no capability. `concealed: true` marks the text so clipboard histories skip it (for passwords). |
+| `z.ui.row(children, { spacing, align })`, `z.ui.column(children, { spacing, align })` | Lay controls out side by side or top to bottom. |
+| `z.ui.section(title, children)` | A group on a rounded card, like the sections in Settings. `title` can be `null`. |
+| `z.ui.list(items, { selected, onSelect(id), onAction(id, index), empty })` | Rows. Each item is `{ id, title, subtitle, detail, symbol, image, actions: [{ symbol, label }] }`; `image` (a clipboard history picture) shows a small thumbnail instead of the symbol. `onAction` gets the row id and which action button was clicked. `empty` is shown when there are no items. |
+| `z.ui.canvas({ width, height, draw(g, width, height) })` | A small drawing area using the same drawing API as games (a QR code, a chart, a color wheel). |
+| `z.ui.swatch(color, { size, selected, onPress, accessibilityLabel })` | A color square. With `onPress` it's clickable; `selected: true` rings it in the accent color. Give clickable swatches an `accessibilityLabel` (for example the hex value) for VoiceOver. |
+| `z.ui.disclosure(label, expanded, onToggle(open), children)` | A row with a chevron that shows or hides `children`. The pack keeps `expanded`, so start it `false` to hide the contents by default. |
+| `z.ui.divider()`, `z.ui.spacer()` | A thin line; flexible space in a row or column. |
+
+Every control also accepts an `id`. Give ids to controls in lists that change (for example rows you add and remove), so events always reach the right control. A screen can have up to 2,000 controls, nested at most 16 deep.
+
+### Utility helpers
+
+- `z.tile(text)`: a short line under the utility's tile in the Utilities tab ("3 saved"). An empty string clears it. While one of the utility's background services runs, the tile shows the service's own line instead ("On until 3:00 PM").
+- `z.random.int(max)`: a whole number from 0 up to (not including) `max`, from the Mac's cryptographically secure random source. Use it (and `z.random.pick(array)`) instead of `Math.random()` for anything like passwords. `z.random.uuid()` makes a UUID.
+- `z.text.base64Encode(text)`, `z.text.base64Decode(text)` (`null` if it isn't Base64 of text) and `z.text.sha256(text)` (hex). They work on UTF-8, so any language and emoji are fine.
+- `z.qr(text, { level })`: the QR code for `text` as rows of `true`/`false` modules, without the white border (draw at least 4 modules of it yourself). `level` is `"L"`, `"M"` (default), `"Q"` or `"H"`. `null` if the text is too long. Made by macOS, offline.
+
+### A small utility
+
+```js
+// Counts the words and characters of what you type.
+let text = "";
+
+zephydian.utility({
+  start() { text = z.storage.get("text") || ""; },
+  view() {
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    return z.ui.column([
+      z.ui.field({ value: text, placeholder: "Type or paste text", multiline: true, lines: 8,
+                   onChange: t => { text = t; z.storage.set("text", t); } }),
+      z.ui.row([
+        z.ui.text(words + (words === 1 ? " word" : " words"), { style: "title" }),
+        z.ui.text(text.length + " characters", { style: "secondary" }),
+      ]),
+      z.ui.row([z.ui.copy(text), z.ui.button("Clear", () => { text = ""; z.storage.remove("text"); })]),
+    ], { spacing: 12 });
+  },
+});
+```
+
+## Capabilities
+
+A capability is something a pack may do beyond its own screen and storage. Each one is written in Swift inside Zephydian; a pack can only ask for it through the SDK. A pack lists what it uses in its manifest:
+
+```json
+"capabilities": ["clipboard.write", "power.awake"]
+```
+
+- The Library shows them on the pack's row ("Uses: clipboard, keep awake"), and **asks before installing** a pack that has any, listing each one in plain words.
+- Calling something the manifest doesn't declare throws an error ("add \"clipboard.write\" to \"capabilities\" in manifest.json").
+- Some capabilities keep working after the panel closes (a **background service**). A service runs only while the utility has switched it on, stops when it's switched off or the utility is removed, turns the menu bar icon the accent color (except clipboard recording, which is meant to stay on), and is listed in Settings → Packs, where people can stop it.
+- Where macOS has its own permission (notifications, screen recording), macOS still asks the first time it's used.
+
+| Capability | What people see | API |
+| --- | --- | --- |
+| `clipboard.write` | Copy text to your clipboard | `z.clipboard.write(text, { concealed })`; `z.clipboard.writeImage(drawing)` copies a drawing as an image (returns `true` if it worked) |
+| `power.awake` | Keep your Mac awake, in the background while it's switched on | `z.awake.start({ minutes, display })` (no `minutes` = until stopped; `display: true` keeps the screen on too), `z.awake.stop()`, `z.awake.status()` → `{ on, until }` (`until` in milliseconds since 1970, or `null`) |
+| `files.save` | Save files to a place you choose | `z.files.save({ name, text }, done)` or `z.files.save({ name, image: drawing }, done)`. macOS's save dialog asks where; `done(saved)` gets `true` or `false`. The pack never learns where the file went. |
+| `color.sample` | Read the color of a spot on the screen you pick | `z.color.sample(done)` shows macOS's color loupe; `done(color)` gets `{ hex, r, g, b, a }` (sRGB, 0–255), or `null` if the person pressed Esc. |
+
+| `timers` | Run timers in the background and play a sound when they end | `z.timers.start({ label, seconds, sound, chain })` → id. `chain` is a list of `{ label, seconds }` phases that start one after another (a focus cycle). `z.timers.list()` → `[{ id, label, seconds, paused, endsAt, remaining, phase, phases, sound }]` (times in ms), `z.timers.pause(id)`, `resume(id)`, `cancel(id)`, `z.timers.finished()` → the last day's `{ label, at }`, `z.timers.sounds()` and `z.timers.preview(sound)`. Timers are kept if Zephydian quits. |
+| `notifications` | Show notifications (macOS asks you first) | With `timers`: a notification when each timer ends. |
+| `clipboard.read` | Read what you copy, in the background while it's switched on | `z.history.record(on)`, `z.history.recording()`, `z.history.items({ query })` → `[{ id, kind, text, image, width, height, appName, at, pinned }]`, `z.history.copy(id)`, `pin(id, on)`, `remove(id)`, `clear()` (keeps pinned), `apps()` and `ignore(appID, on)`. Zephydian records text and images (never files, and never what password managers mark private), keeps the last 200 plus pinned items on this Mac, and deletes them when the pack is removed. Show an item's picture with a list row's `image`. |
+| `shortcut` | Open itself with a keyboard shortcut you choose | Put `z.ui.shortcut(label)` in your view: a field where the person records any key combination, with a warning under it if macOS, most apps' menus, another Zephydian shortcut or another app already uses it. `z.shortcut.get()` → the label (like "⌥⇧4") or `null`, `z.shortcut.clear()`. Pressing it opens the panel on the pack. |
+| `system.stats` | Read CPU, memory, disk, battery and network use | `z.system.stats()` → `{ cpu: { user, system, cores }, memory: { used, total, pressure }, disk: { free, total }, battery: { present, level, charging, pluggedIn, minutesLeft, minutesToFull }, network: { in, out }, uptime }`. CPU and network (bytes per second) are measured since the previous call, so call it on a steady loop, only while on screen. There are no per-app figures. |
+
+A **drawing** for images is `{ width, height, scale, draw(g, width, height) }`, using the same drawing API as games. `scale` (1–4, default 2) is pixels per point. Theme colors aren't meaningful outside the panel, so exported drawings should use fixed colors like `"#000000"`.
+
+| `screen.capture` | Take pictures of your screen (macOS asks you first) and save them in Pictures/Screenshots or a folder you choose | `z.screen.capture(mode, done)` with `"area"`, `"window"` or `"screen"`: Zephydian hides the panel, shows its own selection (Esc cancels), waits the delay, captures (leaving its own windows out) and shows a preview card with Copy, Save, Edit and Close; left alone, the shot is copied. `done({ id })` or `done({ error })`. `z.screen.permission()`, `requestPermission()`, `prefs()` / `setPrefs({ delay, pointer, sound, format, autoCopy })` (delay 0, 3, 5 or 10; format `"png"` or `"jpeg"`; `autoCopy` copies every shot as soon as it's taken), `folder()` → `{ label, custom }`, `chooseFolder(done)`, `resetFolder()`, `openFolder()`, `shots()` → this session's `[{ id, width, height, at, saved, image }]`, `copy(id)`, `save(id)` → file name, `saveAs(id, done)`, `delete(id)` (a saved file goes to the Trash), `canEdit()` and `edit(id)` (opens an installed image editor). A pack with `shortcut` and `screen.capture` takes an Area screenshot when its shortcut is pressed. |
+
+`windows` is reserved for the image editor (it gets its API with it).
+
 ## A complete example
 
 `packs/games/lights/main.js`, a 5×5 Lights Out:
@@ -272,7 +381,7 @@ zephydian.game({
 
 1. Build and run Zephydian from Xcode (see `CONTRIBUTING.md`).
 2. Copy your pack folder (for example `packs/games/lights`) into the `dev` folder above.
-3. Open the panel. The pack appears in the Games grid with a "DEV" badge. It's read from disk again every time you open it, so after editing, go back and open it again. If the pack can't be loaded, the Xcode console says why.
+3. Open the panel. The pack appears in the Games grid (or, for a utility, the Utilities tab) with a "DEV" badge. It's read from disk again every time you open it, so after editing, go back and open it again. If the pack can't be loaded, the Xcode console says why.
 
 Release builds never load anything from this folder. They install only signed packs from the Library.
 
@@ -284,7 +393,7 @@ Before opening a pull request:
 
 ## Submitting a pack
 
-1. Add your folder under `packs/games/`, and run `swift scripts/packs.swift check packs`.
+1. Add your folder under `packs/games/` or `packs/utilities/`, and run `swift scripts/packs.swift check packs`.
 2. Open a pull request that says what the pack does and what you tested.
 3. A maintainer reviews the code. Every line is read before merging, because the pack will run on other people's Macs.
 4. After merging, the release workflow builds, signs and publishes it, and it appears in everyone's Library.
@@ -300,6 +409,7 @@ For a change to an existing pack, raise its `version` in the manifest and add a 
   1. checks the catalog's signature,
   2. checks that the downloaded file's SHA-256 matches the catalog,
   3. unpacks it only after both checks pass.
+- The catalog also lists each pack's capabilities, so the Library can show them, and ask, before anything is downloaded.
 
   A pack that was changed anywhere along the way is refused.
 - Zephydian goes online only when you open the Library or install something, plus at most one quiet update check a day. You can turn that check off in Settings. No information about you is sent.

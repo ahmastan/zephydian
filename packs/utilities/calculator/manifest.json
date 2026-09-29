@@ -1,0 +1,11 @@
+{
+  "id": "calculator",
+  "name": "Calculator",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 2,
+  "description": "Type a calculation or a unit conversion and see the answer as you type.",
+  "hint": "Enter saves to history · ans = last answer · 5 km in mi",
+  "symbol": "plus.forwardslash.minus",
+  "whatsNew": "First release."
+}

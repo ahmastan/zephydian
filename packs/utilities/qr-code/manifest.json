@@ -1,0 +1,11 @@
+{
+  "id": "qr-code",
+  "name": "QR Code",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 2,
+  "description": "Turn text or a link into a QR code to copy or save, made offline.",
+  "symbol": "qrcode",
+  "capabilities": ["clipboard.write", "files.save"],
+  "whatsNew": "First release."
+}

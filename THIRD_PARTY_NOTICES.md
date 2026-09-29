@@ -19,3 +19,11 @@ permission notices are included. The full notice ships inside the app as
 > provided that the above copyright notice appears in all copies and that both that copyright notice and
 > this permission notice appear in supporting documentation. Kevin Atkinson makes no representations about
 > the suitability of this array for any purpose. It is provided "as is" without express or implied warranty.
+
+## EFF Large Wordlist for Passphrases
+
+The word list in `packs/utilities/passwords/assets/words.txt` (used by the Passwords utility for passphrases)
+is the **EFF Large Wordlist for Passphrases** by the Electronic Frontier Foundation, <https://www.eff.org/dice>,
+used under the [Creative Commons Attribution 3.0 United States](https://creativecommons.org/licenses/by/3.0/us/)
+license. The dice numbers were removed; the words are unchanged. The notice ships inside the pack as
+`assets/words-license.txt`.

@@ -24,8 +24,8 @@ settings:
     SWIFT_VERSION: "6.0"
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor   # UI code runs on the main thread by default
     SWIFT_APPROACHABLE_CONCURRENCY: YES
-    MARKETING_VERSION: 0.4.0                   # the version users see
-    CURRENT_PROJECT_VERSION: 4                 # build number, bump every release
+    MARKETING_VERSION: 0.5.0                   # the version users see
+    CURRENT_PROJECT_VERSION: 5                 # build number, bump every release
 
 targets:
   Zephydian:
@@ -57,9 +57,17 @@ targets:
         com.apple.security.app-sandbox: true
         # Outgoing connections only, to download packs from GitHub (never while idle, see PackManager).
         com.apple.security.network.client: true
-        # Read-only access to the Dock's settings, only to warn about clashing macOS Hot Corners.
+        # Saving a file only where the user picks in a save dialog (packs with "files.save", e.g. QR Code's PNG).
+        com.apple.security.files.user-selected.read-write: true
+        # Screenshots save into Pictures/Screenshots by default (Pictures only), or into a folder the person
+        # picks, remembered with a security-scoped bookmark.
+        com.apple.security.assets.pictures.read-write: true
+        com.apple.security.files.bookmarks.app-scope: true
+        # Read-only access to the Dock's settings (to warn about clashing macOS Hot Corners) and to macOS's
+        # keyboard shortcuts (to warn when a shortcut someone records is already used by macOS).
         com.apple.security.temporary-exception.shared-preference.read-only:
           - com.apple.dock
+          - com.apple.symbolichotkeys
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ahmastan.zephydian
@@ -73,4 +81,11 @@ targets:
         COMBINE_HIDPI_IMAGES: YES
         DEAD_CODE_STRIPPING: YES
         ENABLE_USER_SCRIPT_SANDBOXING: YES
+      configs:
+        # Release apps ship without debug symbols (they stay in the separate .dSYM next to the app),
+        # which more than halves the download.
+        Release:
+          DEPLOYMENT_POSTPROCESSING: YES
+          STRIP_INSTALLED_PRODUCT: YES
+          STRIP_STYLE: non-global
     scheme: {}

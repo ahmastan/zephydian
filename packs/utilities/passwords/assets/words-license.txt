@@ -1,0 +1,4 @@
+words.txt is the EFF Large Wordlist for Passphrases by the Electronic Frontier Foundation
+(https://www.eff.org/dice), used under the Creative Commons Attribution 3.0 United States
+license (https://creativecommons.org/licenses/by/3.0/us/). The dice numbers were removed;
+the words are unchanged.

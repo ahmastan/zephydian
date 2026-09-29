@@ -1,0 +1,10 @@
+{
+  "id": "text",
+  "name": "Text",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 2,
+  "description": "Count, change case, tidy lines, format JSON, encode, hash and more.",
+  "symbol": "textformat",
+  "whatsNew": "First release."
+}

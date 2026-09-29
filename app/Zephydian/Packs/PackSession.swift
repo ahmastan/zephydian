@@ -2,12 +2,15 @@ import AppKit
 import SwiftUI
 
 /// A running pack, seen by the rest of the app as one more `GameSession`. It keeps what the pack
-/// shows (drawing, score, overlay, menu, toast) as observable state for `PackView`.
+/// shows (drawing, score, overlay, menu, toast) as observable state for `PackView`, or, for a
+/// utility, its view tree for `UtilityView`.
 @Observable
 final class PackSession: GameSession, PackHost {
     let bundle: PackBundle
 
     private(set) var shapes: [PackShape] = []
+    /// A utility's controls (SDK 2).
+    private(set) var ui: PackUINode?
     private(set) var score = ""
     private(set) var hintText: String
     private(set) var overlay: PackOverlay?
@@ -48,8 +51,16 @@ final class PackSession: GameSession, PackHost {
 
     func togglePause() { isPaused ? resume() : pause() }
 
+    var isUtility: Bool { bundle.kind == .utility }
+
     func handleKey(_ event: NSEvent) -> Bool {
         guard failure == nil, let key = Self.packKey(event) else { return false }
+        if isUtility {
+            // Typing in one of the utility's fields goes to the field, not the pack.
+            if event.window?.firstResponder is NSText { return false }
+            if isPaused { resume() }
+            return runtime.key(key)
+        }
         let isEnter = key.key == "Enter", isSpace = key.key == " "
         if isPaused && showsPauseButton {
             // The "Paused" card is up: Space or Enter resumes, other keys wait.
@@ -73,9 +84,13 @@ final class PackSession: GameSession, PackHost {
         return runtime.keyUp(key)
     }
 
-    func undo() -> Bool { failure == nil && runtime.undo() }
+    func undo() -> Bool {
+        // While typing in a utility's field, ⌘Z undoes the typing instead.
+        if isUtility, NSApp.keyWindow?.firstResponder is NSText { return false }
+        return failure == nil && runtime.undo()
+    }
 
-    func makeView() -> AnyView { AnyView(PackView(session: self)) }
+    func makeView() -> AnyView { isUtility ? AnyView(UtilityView(session: self)) : AnyView(PackView(session: self)) }
 
     func makeHeaderAccessory() -> AnyView? {
         menu == nil ? nil : AnyView(PackMenuView(session: self))
@@ -92,6 +107,16 @@ final class PackSession: GameSession, PackHost {
     }
 
     func pressOverlayButton(_ index: Int) { runtime.pressOverlayButton(index) }
+
+    /// A utility control was used: `event` is its handler's name (onPress, onChange…).
+    func uiEvent(_ id: String, _ event: String, _ value: Any) {
+        guard failure == nil else { return }
+        if isPaused { resume() }
+        runtime.uiEvent(id, event, value)
+    }
+
+    /// Asks a utility for its view again (something outside it changed, like a stopped service).
+    func refresh() { runtime.refresh() }
     func selectMenuItem(_ index: Int) { runtime.selectMenuItem(index) }
 
     /// Sends `z.theme` to the pack: the current appearance's colors as hex strings.
@@ -110,6 +135,15 @@ final class PackSession: GameSession, PackHost {
 
     /// An image from the pack's assets/ folder (loaded once).
     func image(named name: String) -> NSImage? {
+        // Pictures from the clipboard history, for utilities allowed to read it.
+        if name.hasPrefix("screenshot:") {
+            guard bundle.manifest.capabilities?.contains("screen.capture") == true else { return nil }
+            return PackServices.shared.capture.thumbnail(String(name.dropFirst(11)))
+        }
+        if name.hasPrefix("clipboard:") {
+            guard bundle.manifest.capabilities?.contains("clipboard.read") == true else { return nil }
+            return PackServices.shared.clipboard.thumbnail(packID: bundle.id, id: String(name.dropFirst(10)))
+        }
         if let cached = images[name] { return cached }
         guard let url = bundle.assetURL(name), let image = NSImage(contentsOf: url) else { return nil }
         images[name] = image
@@ -119,6 +153,7 @@ final class PackSession: GameSession, PackHost {
     // MARK: PackHost
 
     func packDidDraw(_ shapes: [PackShape]) { self.shapes = shapes }
+    func packViewChanged(_ node: PackUINode) { if node != ui { ui = node } }
     func packScoreChanged(_ text: String) { score = text }
     func packHintChanged(_ text: String) { hintText = text }
     func packOverlayChanged(_ overlay: PackOverlay?) { self.overlay = overlay }
@@ -230,21 +265,23 @@ struct PackView: View {
 
     // MARK: Drawing
 
-    private static func render(_ shapes: [PackShape], in base: GraphicsContext, size: CGSize, accent: Color,
-                               image: (String) -> NSImage?) {
+    static func color(_ c: PackColor, accent: Color) -> Color {
+        switch c {
+        case .theme("accent"): accent
+        case .theme("secondary"): Color(nsColor: .secondaryLabelColor)
+        case .theme("fill"): Tokens.fill
+        case .theme("background"): Color(nsColor: .windowBackgroundColor)
+        case .theme: Color(nsColor: .labelColor)
+        case let .rgba(r, g, b, a): Color(.sRGB, red: r, green: g, blue: b, opacity: a)
+        }
+    }
+
+    static func render(_ shapes: [PackShape], in base: GraphicsContext, size: CGSize, accent: Color,
+                       image: (String) -> NSImage?) {
         var context = base
         var stack: [GraphicsContext] = []
 
-        func color(_ c: PackColor) -> Color {
-            switch c {
-            case .theme("accent"): accent
-            case .theme("secondary"): Color(nsColor: .secondaryLabelColor)
-            case .theme("fill"): Tokens.fill
-            case .theme("background"): Color(nsColor: .windowBackgroundColor)
-            case .theme: Color(nsColor: .labelColor)
-            case let .rgba(r, g, b, a): Color(.sRGB, red: r, green: g, blue: b, opacity: a)
-            }
-        }
+        func color(_ c: PackColor) -> Color { Self.color(c, accent: accent) }
         func paint(_ path: Path, _ style: PackShape.Style) {
             let fill = style.fill ?? (style.stroke == nil ? .theme("text") : nil)
             if let fill { context.fill(path, with: .color(color(fill))) }

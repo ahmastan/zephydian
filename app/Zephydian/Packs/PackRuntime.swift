@@ -81,6 +81,8 @@ nonisolated struct PackKey {
 /// What the runtime tells the game screen.
 protocol PackHost: AnyObject {
     func packDidDraw(_ shapes: [PackShape])
+    /// A utility's controls changed (SDK 2).
+    func packViewChanged(_ node: PackUINode)
     func packScoreChanged(_ text: String)
     func packHintChanged(_ text: String)
     func packOverlayChanged(_ overlay: PackOverlay?)
@@ -95,7 +97,7 @@ protocol PackHost: AnyObject {
 /// Packs get nothing beyond what's defined here: JavaScriptCore has no network, files or timers.
 /// All calls happen on the main thread.
 final class PackRuntime {
-    static let maxShapes = 20_000
+    nonisolated static let maxShapes = 20_000
     /// Longest a single call into the pack may run before it's stopped (an endless loop, say).
     static let callTimeLimit: Double = 1.0
 
@@ -106,6 +108,10 @@ final class PackRuntime {
     private var sdk: JSValue!            // the prelude's private entry points
     private let storage: PackStorage
     private let defaults: UserDefaults
+    private let services: PackServices
+    /// The capabilities the manifest declared. Nothing else is allowed.
+    private let capabilities: Set<String>
+    private var isUtility: Bool { bundle.kind == .utility }
     private(set) var failure: String?
     private(set) var isStarted = false
     private(set) var isPaused = false
@@ -121,13 +127,18 @@ final class PackRuntime {
     var isLooping: Bool { ticker != nil }
     var bestScoreKey: String { "pack.\(bundle.id).best" }
     var bestTimeKey: String { "pack.\(bundle.id).bestTime" }
+    /// The line under a utility's tile (`z.tile`).
+    static func tileKey(_ id: String) -> String { "pack.\(id).tile" }
 
     /// Runs main.js right away. `host` is set first, so calls made while the script loads aren't lost.
-    init(bundle: PackBundle, host: PackHost?, storage: PackStorage? = nil, defaults: UserDefaults = .standard) {
+    init(bundle: PackBundle, host: PackHost?, storage: PackStorage? = nil, defaults: UserDefaults = .standard,
+         services: PackServices = .shared) {
         self.bundle = bundle
         self.host = host
         self.storage = storage ?? PackStorage(packID: bundle.id)
         self.defaults = defaults
+        self.services = services
+        capabilities = Set(bundle.manifest.capabilities ?? [])
         context = JSContext()!
         context.name = "Zephydian pack: \(bundle.id)"
         Self.limitExecutionTime(of: context)
@@ -138,8 +149,8 @@ final class PackRuntime {
         installSDK()
         guard failure == nil else { return }
         context.evaluateScript(bundle.script, withSourceURL: URL(string: "main.js"))
-        if failure == nil, sdk.invokeMethod("hasGame", withArguments: []).toBool() == false {
-            fail("main.js never called zephydian.game({ … })")
+        if failure == nil, sdk.invokeMethod("hasApp", withArguments: []).toBool() == false {
+            fail(isUtility ? "main.js never called zephydian.utility({ … })" : "main.js never called zephydian.game({ … })")
         }
     }
 
@@ -179,6 +190,19 @@ final class PackRuntime {
     func pressOverlayButton(_ index: Int) { call("overlayPress", index) }
     func selectMenuItem(_ index: Int) { call("menuSelect", index) }
 
+    /// A utility control was used. `event` is the handler's name on the control (onPress, onChange…).
+    func uiEvent(_ id: String, _ event: String, _ value: Any) { call("event", id, event, value) }
+
+    /// Draws (or, for a utility, asks for its view) again soon.
+    func refresh() { requestDraw() }
+
+    /// Hands the result of something that finished later (a save dialog, the color sampler) to the
+    /// function the pack passed in. Dropped if the pack has stopped.
+    private func respond(_ callback: Int, _ value: Any) {
+        guard callback > 0 else { return }
+        call("callback", callback, value)
+    }
+
     /// Stops the loop and pending `z.after` calls, then tells the pack.
     func pause() {
         guard !isPaused, failure == nil else { return }
@@ -203,6 +227,8 @@ final class PackRuntime {
     private func call(_ name: String, _ args: Any...) -> JSValue? {
         guard failure == nil else { return nil }
         let result = sdk.invokeMethod(name, withArguments: args)
+        // A utility's view follows its state: after anything that could change it, ask again.
+        if isUtility && name != "view" { requestDraw() }
         return failure == nil ? result : nil
     }
 
@@ -214,6 +240,15 @@ final class PackRuntime {
 
     private func draw() {
         drawScheduled = false
+        if isUtility {
+            guard let json = call("view"), json.isString else { return }
+            do {
+                host?.packViewChanged(try PackUINode.parse(json: json.toString()))
+            } catch {
+                fail("view: \(error)")
+            }
+            return
+        }
         guard let list = call("draw") else { return }
         do {
             host?.packDidDraw(try Self.parseShapes(list))
@@ -348,6 +383,232 @@ final class PackRuntime {
             }
             return text ?? NSNull()
         } as @convention(block) (String) -> Any)
+        define("tile", { [weak self] (s: String) in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let key = Self.tileKey(self.bundle.id)
+                if s.isEmpty { self.defaults.removeObject(forKey: key) } else { self.defaults.set(String(s.prefix(40)), forKey: key) }
+            }
+        } as @convention(block) (String) -> Void)
+        define("randomInt", { (max: Double) -> Double in
+            // SystemRandomNumberGenerator is the system's cryptographically secure source.
+            guard max.isFinite, max >= 1 else { return 0 }
+            return Double(UInt64.random(in: 0..<UInt64(min(max, 9_007_199_254_740_991))))
+        } as @convention(block) (Double) -> Double)
+        define("clipboardWrite", { [weak self] (s: String, concealed: Bool) in
+            MainActor.assumeIsolated {
+                guard let self, self.capabilities.contains("clipboard.write") else { return }
+                PackClipboard.write(s, concealed: concealed)
+            }
+        } as @convention(block) (String, Bool) -> Void)
+        define("awakeStart", { [weak self] (minutes: Double, display: Bool) -> Bool in
+            MainActor.assumeIsolated {
+                guard let self, self.capabilities.contains("power.awake") else { return false }
+                return self.services.startAwake(packID: self.bundle.id, packName: self.bundle.manifest.name,
+                                                minutes: minutes > 0 && minutes.isFinite ? minutes : nil, display: display)
+            }
+        } as @convention(block) (Double, Bool) -> Bool)
+        define("awakeStop", { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.capabilities.contains("power.awake") else { return }
+                self.services.stopAwake(packID: self.bundle.id)
+            }
+        } as @convention(block) () -> Void)
+        define("awakeStatus", { [weak self] () -> String in
+            MainActor.assumeIsolated {
+                guard let self, self.capabilities.contains("power.awake") else { return "{\"on\":false,\"until\":null}" }
+                let status = self.services.awakeStatus(packID: self.bundle.id)
+                let until = status.until.map { String(Int($0.timeIntervalSince1970 * 1000)) } ?? "null"
+                return "{\"on\":\(status.on),\"until\":\(until)}"
+            }
+        } as @convention(block) () -> String)
+        define("base64Encode", { (s: String) -> String in PackNative.base64Encode(s) } as @convention(block) (String) -> String)
+        define("base64Decode", { (s: String) -> Any in PackNative.base64Decode(s) ?? NSNull() } as @convention(block) (String) -> Any)
+        define("sha256", { (s: String) -> String in PackNative.sha256(s) } as @convention(block) (String) -> String)
+        define("uuid", { () -> String in UUID().uuidString } as @convention(block) () -> String)
+        define("qr", { (text: String, level: String) -> Any in
+            let rows: [String]? = MainActor.assumeIsolated { PackNative.qr(text, level: level) }
+            return rows ?? NSNull()
+        } as @convention(block) (String, String) -> Any)
+        define("clipboardWriteImage", { [weak self] (json: String) -> Bool in
+            MainActor.assumeIsolated {
+                guard let self, self.capabilities.contains("clipboard.write"),
+                      let png = PackNative.png(fromDrawingJSON: json) else { return false }
+                PackNative.copyImage(png)
+                return true
+            }
+        } as @convention(block) (String) -> Bool)
+        define("filesSave", { [weak self] (name: String, text: JSValue, image: JSValue, callback: Int) in
+            MainActor.assumeIsolated {
+                guard let self, self.capabilities.contains("files.save") else { return }
+                let data: Data? = image.isString ? PackNative.png(fromDrawingJSON: image.toString())
+                    : text.isString ? Data(text.toString().utf8) : nil
+                guard let data, data.count <= 50 * 1024 * 1024 else { return self.respond(callback, false) }
+                PackNative.save(name: name, data: data) { [weak self] saved in self?.respond(callback, saved) }
+            }
+        } as @convention(block) (String, JSValue, JSValue, Int) -> Void)
+        define("colorSample", { [weak self] (callback: Int) in
+            MainActor.assumeIsolated {
+                guard let self, self.capabilities.contains("color.sample") else { return }
+                PackNative.sampleColor { [weak self] color in
+                    self?.respond(callback, color.map(PackNative.colorObject) ?? NSNull())
+                }
+            }
+        } as @convention(block) (Int) -> Void)
+        // Wave 2: timers, clipboard history, a shortcut and system readings. Each needs its capability.
+        let id = bundle.id, name = bundle.manifest.name
+        func allowed(_ capability: String) -> Bool { capabilities.contains(capability) }
+        define("timersStart", { [weak self] (json: String) -> String in
+            MainActor.assumeIsolated {
+                guard let self, allowed("timers"), let o = Self.jsonObject(json) else { return "" }
+                let seconds = min(max((o["seconds"] as? NSNumber)?.doubleValue ?? 0, 1), 7 * 86_400)
+                let chain = (o["chain"] as? [[String: Any]] ?? []).map {
+                    PackTimers.Phase(label: String(($0["label"] as? String ?? "").prefix(60)),
+                                     seconds: min(max(($0["seconds"] as? NSNumber)?.doubleValue ?? 0, 1), 7 * 86_400))
+                }
+                return self.services.timers.start(packID: id, packName: name, label: o["label"] as? String ?? "", seconds: seconds,
+                                                  sound: o["sound"] as? String, notify: allowed("notifications"), chain: chain)
+            }
+        } as @convention(block) (String) -> String)
+        define("timersList", { [weak self] () -> String in
+            MainActor.assumeIsolated {
+                guard let self, allowed("timers") else { return "[]" }
+                return Self.jsonString(self.services.timers.list(packID: id).map { t in
+                    ["id": t.id, "label": t.label, "seconds": t.seconds, "paused": t.endsAt == nil,
+                     "endsAt": t.endsAt.map { $0.timeIntervalSince1970 * 1000 } ?? NSNull(), "remaining": t.remaining * 1000,
+                     "phase": t.phase, "phases": t.phases, "sound": t.sound ?? NSNull()] as [String: Any]
+                })
+            }
+        } as @convention(block) () -> String)
+        define("timersControl", { [weak self] (action: String, timer: String) in
+            MainActor.assumeIsolated {
+                guard let self, allowed("timers") else { return }
+                switch action {
+                case "pause": self.services.timers.pause(packID: id, id: timer)
+                case "resume": self.services.timers.resume(packID: id, id: timer)
+                case "cancel": self.services.timers.cancel(packID: id, id: timer)
+                default: break
+                }
+            }
+        } as @convention(block) (String, String) -> Void)
+        define("timersFinished", { [weak self] () -> String in
+            MainActor.assumeIsolated {
+                guard let self, allowed("timers") else { return "[]" }
+                return Self.jsonString(self.services.timers.finishedLog(packID: id).map {
+                    ["label": $0.label, "at": $0.at.timeIntervalSince1970 * 1000] as [String: Any]
+                })
+            }
+        } as @convention(block) () -> String)
+        define("timerSounds", { () -> [String] in PackTimers.sounds } as @convention(block) () -> [String])
+        define("timerPreview", { (sound: String) in MainActor.assumeIsolated { PackTimers.preview(sound) } } as @convention(block) (String) -> Void)
+
+        define("clipRecording", { [weak self] () -> Bool in
+            MainActor.assumeIsolated { self.map { allowed("clipboard.read") && $0.services.clipboard.isRecording(packID: id) } ?? false }
+        } as @convention(block) () -> Bool)
+        define("clipRecord", { [weak self] (on: Bool) in
+            MainActor.assumeIsolated {
+                guard let self, allowed("clipboard.read") else { return }
+                self.services.clipboard.setRecording(on, packID: id, packName: name)
+            }
+        } as @convention(block) (Bool) -> Void)
+        define("clipItems", { [weak self] (query: String) -> String in
+            MainActor.assumeIsolated {
+                guard let self, allowed("clipboard.read") else { return "[]" }
+                return Self.jsonString(self.services.clipboard.items(packID: id, query: query).map { item in
+                    ["id": item.id, "kind": item.kind, "text": item.text.map { String($0.prefix(2000)) } ?? NSNull(),
+                     "image": item.kind == "image" ? "clipboard:\(item.id)" : NSNull(), "width": item.width ?? 0, "height": item.height ?? 0,
+                     "bytes": item.bytes, "app": item.app ?? NSNull(), "appName": item.appName ?? NSNull(),
+                     "at": item.at.timeIntervalSince1970 * 1000, "pinned": item.pinned] as [String: Any]
+                })
+            }
+        } as @convention(block) (String) -> String)
+        define("clipControl", { [weak self] (action: String, item: String, on: Bool) -> Bool in
+            MainActor.assumeIsolated {
+                guard let self, allowed("clipboard.read") else { return false }
+                let history = self.services.clipboard
+                switch action {
+                case "copy": return history.copy(packID: id, id: item)
+                case "pin": history.pin(packID: id, id: item, on)
+                case "remove": history.remove(packID: id, id: item)
+                case "clear": history.clear(packID: id)
+                case "ignore": history.setIgnored(packID: id, app: item, on)
+                default: return false
+                }
+                return true
+            }
+        } as @convention(block) (String, String, Bool) -> Bool)
+        define("clipApps", { [weak self] () -> String in
+            MainActor.assumeIsolated {
+                guard let self, allowed("clipboard.read") else { return "[]" }
+                return Self.jsonString(self.services.clipboard.apps(packID: id).map { ["id": $0.id, "name": $0.name, "ignored": $0.ignored] as [String: Any] })
+            }
+        } as @convention(block) () -> String)
+
+        define("shortcutGet", { [weak self] () -> Any in
+            let label: String? = MainActor.assumeIsolated {
+                guard let self, allowed("shortcut") else { return nil }
+                return self.services.shortcuts.current(packID: id)?.label
+            }
+            return label ?? NSNull()
+        } as @convention(block) () -> Any)
+        define("shortcutClear", { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, allowed("shortcut") else { return }
+                self.services.shortcuts.remove(packID: id)
+            }
+        } as @convention(block) () -> Void)
+
+        define("systemStats", { [weak self] () -> String in
+            MainActor.assumeIsolated {
+                guard let self, allowed("system.stats") else { return "{}" }
+                return Self.jsonString(self.services.system.read())
+            }
+        } as @convention(block) () -> String)
+        // Screenshots (screen.capture).
+        define("screen", { [weak self] (action: String, arg: String, callback: Int) -> String in
+            MainActor.assumeIsolated {
+                guard let self, allowed("screen.capture") else { return "null" }
+                let capture = self.services.capture
+                func shotJSON(_ shot: ScreenCapture.Shot) -> [String: Any] {
+                    ["id": shot.id, "width": shot.image.width, "height": shot.image.height, "at": shot.date.timeIntervalSince1970 * 1000,
+                     "saved": shot.savedURL?.lastPathComponent ?? NSNull(), "image": "screenshot:\(shot.id)"]
+                }
+                switch action {
+                case "permission": return capture.hasPermission ? "true" : "false"
+                case "requestPermission": capture.requestPermission()
+                case "capture":
+                    capture.capture(packID: id, mode: ScreenCapture.Mode(rawValue: arg) ?? .area) { [weak self] shot, error in
+                        self?.respond(callback, shot.map { ["id": $0] as [String: Any] } ?? ["error": error ?? ""])
+                    }
+                case "prefs":
+                    let p = capture.prefs(id)
+                    return Self.jsonString(["delay": p.delay, "pointer": p.pointer, "sound": p.sound, "format": p.format, "autoCopy": p.autoCopy] as [String: Any])
+                case "setPrefs":
+                    guard let o = Self.jsonObject(arg) else { break }
+                    var p = capture.prefs(id)
+                    if let v = (o["delay"] as? NSNumber)?.intValue { p.delay = [0, 3, 5, 10].contains(v) ? v : 0 }
+                    if let v = o["pointer"] as? Bool { p.pointer = v }
+                    if let v = o["sound"] as? Bool { p.sound = v }
+                    if let v = o["format"] as? String { p.format = v == "jpeg" ? "jpeg" : "png" }
+                    if let v = o["autoCopy"] as? Bool { p.autoCopy = v }
+                    capture.setPrefs(p, packID: id)
+                case "folder":
+                    return Self.jsonString(["label": capture.folderLabel(id), "custom": capture.folder(id).custom] as [String: Any])
+                case "chooseFolder": capture.chooseFolder(packID: id) { [weak self] ok in self?.respond(callback, ok) }
+                case "resetFolder": capture.resetFolder(packID: id)
+                case "openFolder": capture.openFolder(packID: id)
+                case "shots": return Self.jsonString(capture.shots.map(shotJSON))
+                case "copy": return capture.copy(arg) ? "true" : "false"
+                case "save": return capture.save(arg, packID: id).map { Self.jsonString([$0]) } ?? "null"
+                case "saveAs": capture.saveAs(arg, packID: id) { [weak self] ok in self?.respond(callback, ok) }
+                case "delete": capture.delete(arg)
+                case "canEdit": return self.services.imageEditor() == nil ? "false" : "true"
+                case "edit": if let editor = self.services.imageEditor() { self.services.openInEditor(editor, arg) }
+                default: break
+                }
+                return "null"
+            }
+        } as @convention(block) (String, String, Int) -> String)
         define("log", { [weak self] (s: String) in
             #if DEBUG
             MainActor.assumeIsolated { print("[\(self?.bundle.id ?? "pack")] \(s)") }
@@ -355,7 +616,7 @@ final class PackRuntime {
         } as @convention(block) (String) -> Void)
 
         let setup = context.evaluateScript(Self.prelude, withSourceURL: URL(string: "zephydian-sdk.js"))
-        guard let result = setup?.call(withArguments: [native]), failure == nil else { return }
+        guard let result = setup?.call(withArguments: [native, bundle.manifest.kind, Array(capabilities).sorted()]), failure == nil else { return }
         sdk = result.objectForKeyedSubscript("sdk")
         // `z` and `zephydian` can't be replaced by the pack.
         for name in ["z", "zephydian"] {
@@ -369,7 +630,7 @@ final class PackRuntime {
 
     /// The SDK's JavaScript side. It checks and flattens what packs pass in, so Swift only sees plain values.
     private static let prelude = #"""
-    (function (N) {
+    (function (N, KIND, CAPS) {
       "use strict";
       const num = v => (typeof v === "number" && isFinite(v)) ? v : 0;
       const col = v => (typeof v === "string" && v.length < 64) ? v : null;
@@ -403,6 +664,77 @@ final class PackRuntime {
       const pending = new Map();
       const call = (name, ...a) => (game && typeof game[name] === "function") ? game[name](...a) : undefined;
       const text = v => v == null ? "" : String(v);
+      const callbacks = new Map();
+      let nextCallback = 1;
+      const later = fn => {
+        if (fn == null) return 0;
+        if (typeof fn !== "function") throw new TypeError("expected a function");
+        const id = nextCallback++;
+        callbacks.set(id, fn);
+        return id;
+      };
+      // A drawing to export: { width, height, scale, draw(g, width, height) } → JSON for Swift.
+      const drawing = d => {
+        if (!d || typeof d.draw !== "function") throw new TypeError("expected { width, height, draw(g) }");
+        const g = new Draw(), w = num(d.width) || 100, h = num(d.height) || 100;
+        d.draw(g, w, h);
+        return JSON.stringify({ width: w, height: h, scale: num(d.scale) || 2, shapes: g._c });
+      };
+      const need = c => {
+        if (CAPS.indexOf(c) < 0) throw new Error('add "' + c + '" to "capabilities" in manifest.json to use this');
+      };
+
+      // Utility controls (SDK 2). Builders make plain objects; walk() checks them, keeps their
+      // handlers here by key, and sends Swift only plain values.
+      const MAXN = \#(PackUINode.maxNodes), MAXD = \#(PackUINode.maxDepth);
+      const handlers = new Map();
+      let nodeCount = 0;
+      const list = v => (Array.isArray(v) ? v : [v]).filter(c => c != null && c !== false);
+      const ui = Object.freeze({
+        text: (s, o = {}) => Object.assign({}, o, { t: "text", text: text(s) }),
+        field: (o = {}) => Object.assign({}, o, { t: "field", value: text(o.value) }),
+        button: (label, onPress, o = {}) => Object.assign({}, o, { t: "button", label: text(label), onPress }),
+        toggle: (label, value, onChange, o = {}) => Object.assign({}, o, { t: "toggle", label: text(label), value: !!value, onChange }),
+        slider: (o = {}) => Object.assign({}, o, { t: "slider" }),
+        segmented: (options, selected, onChange, o = {}) => Object.assign({}, o, { t: "segmented", options: list(options).map(text), selected, onChange }),
+        picker: (label, options, selected, onChange, o = {}) => Object.assign({}, o, { t: "picker", label: text(label), options: list(options).map(text), selected, onChange }),
+        copy: (value, o = {}) => Object.assign({}, o, { t: "copy", text: text(value) }),
+        row: (children, o = {}) => Object.assign({}, o, { t: "row", children: list(children) }),
+        column: (children, o = {}) => Object.assign({}, o, { t: "column", children: list(children) }),
+        section: (title, children, o = {}) => Object.assign({}, o, { t: "section", title: title == null ? null : text(title), children: list(children) }),
+        list: (items, o = {}) => Object.assign({}, o, { t: "list", items: list(items).map(i => ({
+          id: text(i.id), title: text(i.title), subtitle: i.subtitle == null ? null : text(i.subtitle),
+          detail: i.detail == null ? null : text(i.detail), symbol: i.symbol == null ? null : text(i.symbol),
+          image: i.image == null ? null : text(i.image),
+          actions: list(i.actions || []).map(a => ({ symbol: text(a.symbol), label: text(a.label) })) })) }),
+        canvas: (o = {}) => Object.assign({}, o, { t: "canvas" }),
+        swatch: (color, o = {}) => Object.assign({}, o, { t: "swatch", color: text(color) }),
+        shortcut: (label, o = {}) => { need("shortcut"); return Object.assign({}, o, { t: "shortcut", label: text(label) }); },
+        disclosure: (label, expanded, onToggle, children, o = {}) => Object.assign({}, o, {
+          t: "disclosure", label: text(label), expanded: !!expanded, onToggle, children: list(children) }),
+        divider: () => ({ t: "divider" }),
+        spacer: () => ({ t: "spacer" }),
+      });
+      function walk(n, path, depth) {
+        if (!n || typeof n !== "object" || typeof n.t !== "string") throw new TypeError("view() must return z.ui controls");
+        if (++nodeCount > MAXN) throw new Error("the view has more than " + MAXN + " controls");
+        if (depth > MAXD) throw new Error("the view is nested more than " + MAXD + " deep");
+        const k = (typeof n.id === "string" || typeof n.id === "number") ? String(n.id) : path;
+        const out = { k };
+        for (const key of Object.keys(n)) {
+          const v = n[key];
+          if (typeof v === "function") { if (key !== "draw") (out.on = out.on || []).push(key); }
+          else if (key !== "children" && key !== "id" && key !== "on") out[key] = v;
+        }
+        handlers.set(k, n);
+        if (n.t === "canvas") {
+          const g = new Draw();
+          if (typeof n.draw === "function") n.draw(g, num(n.width) || z.width, num(n.height) || 100);
+          out.shapes = g._c;
+        }
+        if (Array.isArray(n.children)) out.children = n.children.map((c, i) => walk(c, k + "." + i, depth + 1));
+        return out;
+      }
 
       const z = {
         width: 0, height: 0, theme: Object.freeze({}),
@@ -450,19 +782,126 @@ final class PackRuntime {
           return /\.json$/i.test(name) ? JSON.parse(s) : s;
         },
         log(...a) { N.log(a.map(x => typeof x === "string" ? x : JSON.stringify(x)).join(" ")); },
+        ui,
+        tile(t) { N.tile(text(t)); },
+        random: Object.freeze({
+          int(max) { return N.randomInt(Math.floor(num(max))); },
+          pick(arr) { return (Array.isArray(arr) && arr.length) ? arr[N.randomInt(arr.length)] : undefined; },
+          uuid() { return N.uuid(); },
+        }),
+        clipboard: Object.freeze({
+          write(t, o = {}) { need("clipboard.write"); N.clipboardWrite(text(t), !!(o && o.concealed)); },
+          writeImage(d) { need("clipboard.write"); return N.clipboardWriteImage(drawing(d)); },
+        }),
+        text: Object.freeze({
+          base64Encode(s) { return N.base64Encode(text(s)); },
+          base64Decode(s) { return N.base64Decode(text(s)); },
+          sha256(s) { return N.sha256(text(s)); },
+        }),
+        qr(t, o = {}) {
+          const rows = N.qr(text(t), String((o && o.level) || "M"));
+          return rows == null ? null : rows.map(r => Array.from(r, c => c === "1"));
+        },
+        files: Object.freeze({
+          save(o, done) {
+            need("files.save");
+            if (!o || typeof o.name !== "string") throw new TypeError("z.files.save needs { name, text } or { name, image }");
+            N.filesSave(o.name, o.image ? null : text(o.text), o.image ? drawing(o.image) : null, later(done));
+          },
+        }),
+        color: Object.freeze({
+          sample(done) { need("color.sample"); N.colorSample(later(done)); },
+        }),
+        timers: Object.freeze({
+          start(o = {}) {
+            need("timers");
+            const chain = list((o && o.chain) || []).map(p => ({ label: text(p && p.label), seconds: num(p && p.seconds) }));
+            return N.timersStart(JSON.stringify({ label: text(o.label), seconds: num(o.seconds),
+                                                 sound: o.sound == null ? null : text(o.sound), chain }));
+          },
+          list() { need("timers"); return JSON.parse(N.timersList()); },
+          pause(id) { need("timers"); N.timersControl("pause", text(id)); },
+          resume(id) { need("timers"); N.timersControl("resume", text(id)); },
+          cancel(id) { need("timers"); N.timersControl("cancel", text(id)); },
+          finished() { need("timers"); return JSON.parse(N.timersFinished()); },
+          sounds() { return N.timerSounds(); },
+          preview(sound) { N.timerPreview(text(sound)); },
+        }),
+        history: Object.freeze({
+          recording() { need("clipboard.read"); return N.clipRecording(); },
+          record(on) { need("clipboard.read"); N.clipRecord(!!on); },
+          items(o = {}) { need("clipboard.read"); return JSON.parse(N.clipItems(text(o && o.query))); },
+          copy(id) { need("clipboard.read"); return N.clipControl("copy", text(id), false); },
+          pin(id, on) { need("clipboard.read"); N.clipControl("pin", text(id), !!on); },
+          remove(id) { need("clipboard.read"); N.clipControl("remove", text(id), false); },
+          clear() { need("clipboard.read"); N.clipControl("clear", "", false); },
+          apps() { need("clipboard.read"); return JSON.parse(N.clipApps()); },
+          ignore(app, on) { need("clipboard.read"); N.clipControl("ignore", text(app), !!on); },
+        }),
+        shortcut: Object.freeze({
+          get() { need("shortcut"); return N.shortcutGet(); },
+          clear() { need("shortcut"); N.shortcutClear(); },
+        }),
+        screen: (() => {
+          const S = (action, arg, done) => { need("screen.capture"); return JSON.parse(N.screen(action, arg == null ? "" : String(arg), later(done))); };
+          return Object.freeze({
+            permission() { return S("permission"); },
+            requestPermission() { S("requestPermission"); },
+            capture(mode, done) { S("capture", text(mode || "area"), done); },
+            prefs() { return S("prefs"); },
+            setPrefs(o) { S("setPrefs", JSON.stringify(o || {})); },
+            folder() { return S("folder"); },
+            chooseFolder(done) { S("chooseFolder", "", done); },
+            resetFolder() { S("resetFolder"); },
+            openFolder() { S("openFolder"); },
+            shots() { return S("shots"); },
+            copy(id) { return S("copy", text(id)); },
+            save(id) { const r = S("save", text(id)); return r ? r[0] : null; },
+            saveAs(id, done) { S("saveAs", text(id), done); },
+            delete(id) { S("delete", text(id)); },
+            canEdit() { return S("canEdit"); },
+            edit(id) { S("edit", text(id)); },
+          });
+        })(),
+        system: Object.freeze({
+          stats() { need("system.stats"); return JSON.parse(N.systemStats()); },
+        }),
+        awake: Object.freeze({
+          start(o = {}) { need("power.awake"); return N.awakeStart(num(o && o.minutes), !!(o && o.display)); },
+          stop() { need("power.awake"); N.awakeStop(); },
+          status() { need("power.awake"); return JSON.parse(N.awakeStatus()); },
+        }),
       };
       Object.seal(z);
 
       const zephydian = Object.freeze({
         game(g) {
+          if (KIND !== "game") throw new Error('this pack is a utility: call zephydian.utility() (or set "kind": "game")');
           if (game) throw new Error("zephydian.game() was called twice");
           if (!g || typeof g !== "object") throw new TypeError("zephydian.game() needs an object");
           game = g;
         },
+        utility(u) {
+          if (KIND !== "utility") throw new Error('this pack is a game: call zephydian.game() (or set "kind": "utility")');
+          if (game) throw new Error("zephydian.utility() was called twice");
+          if (!u || typeof u !== "object" || typeof u.view !== "function") throw new TypeError("zephydian.utility() needs an object with view()");
+          game = u;
+        },
       });
 
       const sdk = {
-        hasGame: () => game !== null,
+        hasApp: () => game !== null,
+        view: () => {
+          handlers.clear();
+          nodeCount = 0;
+          return JSON.stringify(walk(call("view"), "0", 0));
+        },
+        callback: (id, v) => { const f = callbacks.get(id); callbacks.delete(id); if (f) f(v); },
+        event: (k, name, v) => {
+          const n = handlers.get(k), f = n && n[name];
+          if (typeof f !== "function") return;
+          if (name === "onAction" && v) f(v.id, v.action); else f(v);
+        },
         setTheme(t) { z.theme = Object.freeze(t); },
         start: () => { call("start"); },
         draw: () => { const g = new Draw(); call("draw", g); return g._c; },
@@ -493,6 +932,16 @@ final class PackRuntime {
         ["key": e.key, "shift": e.shift, "option": e.option, "repeat": e.isRepeat]
     }
 
+    static func jsonObject(_ s: String) -> [String: Any]? {
+        s.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+    }
+
+    static func jsonString(_ value: Any) -> String {
+        guard JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value) else { return "null" }
+        return String(decoding: data, as: UTF8.self)
+    }
+
     private static func json(_ value: JSValue) -> [String: Any]? {
         guard value.isString, let data = value.toString().data(using: .utf8) else { return nil }
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
@@ -512,11 +961,15 @@ final class PackRuntime {
                         selected: (m["selected"] as? NSNumber)?.intValue ?? -1)
     }
 
-    struct ShapeError: Error, CustomStringConvertible { let description: String }
+    nonisolated struct ShapeError: Error, CustomStringConvertible { let description: String }
 
     /// Turns the prelude's flat arrays into shapes, checking each one.
     static func parseShapes(_ list: JSValue) throws -> [PackShape] {
-        guard let items = list.toArray() else { return [] }
+        try parseShapes(list.toArray() ?? [])
+    }
+
+    nonisolated static func parseShapes(_ items: [Any]) throws -> [PackShape] {
+        guard items.count <= maxShapes else { throw ShapeError(description: "more than \(maxShapes) shapes") }
         var shapes: [PackShape] = []
         shapes.reserveCapacity(items.count)
         for case let item as [Any] in items {

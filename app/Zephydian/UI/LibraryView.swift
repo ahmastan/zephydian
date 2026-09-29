@@ -12,16 +12,24 @@ struct LibraryView: View {
     @State private var search = ""
     @State private var selection: String?
     @State private var removing: LibraryItem?
+    /// A pack with capabilities waiting for Install to be confirmed.
+    @State private var confirming: LibraryItem?
     @State private var showingNews: LibraryItem?
     @FocusState private var searchFocused: Bool
 
     var body: some View {
+        @Bindable var model = model
         let items = self.items
         VStack(spacing: 0) {
             header
-            searchField
-                .padding(.horizontal, 16)
-                .padding(.bottom, 10)
+            HStack(spacing: 8) {
+                SegmentedControl(selection: $model.libraryFilter, options: [PackBundle.Kind.game, .utility],
+                                 title: { $0 == .game ? "Games" : "Utilities" })
+                    .frame(width: 170)
+                searchField
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 10)
             content(items)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
@@ -29,6 +37,7 @@ struct LibraryView: View {
         .onAppear { model.libraryKeyHandler = { handleKey($0) } }
         .onDisappear { model.libraryKeyHandler = nil }
         .onChange(of: model.librarySearchRequest) { searchFocused = true }
+        .onChange(of: model.libraryFilter) { selection = nil }
         .alert("Remove \(removing?.name ?? "")?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
                presenting: removing) { item in
             Button("Remove") { remove(item, deleteProgress: false) }
@@ -36,6 +45,13 @@ struct LibraryView: View {
             Button("Cancel", role: .cancel) {}
         } message: { _ in
             Text("“Remove” keeps your progress and best scores in case you install it again.")
+        }
+        .alert("Install \(confirming?.name ?? "")?", isPresented: Binding(get: { confirming != nil }, set: { if !$0 { confirming = nil } }),
+               presenting: confirming) { item in
+            Button("Install") { LibraryActions(item: item, packs: packs, model: model).install() }
+            Button("Cancel", role: .cancel) {}
+        } message: { item in
+            Text("\(item.name) can:\n" + item.capabilities.map { "• \($0.sentence)" }.joined(separator: "\n"))
         }
         .alert("What’s new in \(showingNews?.name ?? "")", isPresented: Binding(get: { showingNews != nil }, set: { if !$0 { showingNews = nil } }),
                presenting: showingNews) { _ in
@@ -60,8 +76,8 @@ struct LibraryView: View {
         HStack(spacing: 6) {
             Button { model.closeLibrary() } label: { Image(systemName: "chevron.left") }
                 .glassIconButtonStyle()
-                .help("Back to games (Esc)")
-                .accessibilityLabel("Back to games")
+                .help("Back to \(model.backDestination) (Esc)")
+                .accessibilityLabel("Back to \(model.backDestination)")
             Text("Library").font(.system(size: 15, weight: .semibold))
             Spacer()
         }
@@ -105,7 +121,9 @@ struct LibraryView: View {
                     message("Can’t load the Library", text, retry: true)
                 case .loaded:
                     search.isEmpty
-                        ? message("Nothing here yet", "New games will show up here.", retry: false)
+                        ? (model.libraryFilter == .game
+                            ? message("Nothing here yet", "New games will show up here.", retry: false)
+                            : message("No utilities yet", "More are coming soon.", retry: false))
                         : message("No results", "Nothing matches “\(search)”.", retry: false)
                 }
             }
@@ -121,7 +139,8 @@ struct LibraryView: View {
                         VStack(spacing: 0) {
                             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                                 LibraryRow(item: item, isSelected: selection == item.id,
-                                           remove: { removing = item }, showNews: { showingNews = item })
+                                           remove: { removing = item }, showNews: { showingNews = item },
+                                           confirm: { confirming = item })
                                     .id(item.id)
                                 if index < items.count - 1 { Divider().padding(.leading, 56) }
                             }
@@ -184,13 +203,14 @@ struct LibraryView: View {
     /// removed), and the built-in games (installed instantly). Developer packs aren't listed.
     private var items: [LibraryItem] {
         var result: [String: LibraryItem] = [:]
-        for entry in packs.catalog?.packs ?? [] where entry.kind == "game" {
+        let kind = model.libraryFilter
+        for entry in packs.catalog?.packs ?? [] where entry.kind == kind.rawValue {
             result[entry.id] = LibraryItem(entry: entry, installedVersion: packs.installed[entry.id])
         }
-        for bundle in library.packs where !bundle.isDev && result[bundle.id] == nil {
+        for bundle in library.packs where bundle.kind == kind && !bundle.isDev && result[bundle.id] == nil {
             result[bundle.id] = LibraryItem(bundle: bundle)
         }
-        for info in GameRegistry.builtIn where result[info.id] == nil {
+        for info in GameRegistry.builtIn where kind == .game && result[info.id] == nil {
             result[info.id] = LibraryItem(builtIn: info, installed: InstalledGames.shared.contains(info.id))
         }
         let query = search.trimmingCharacters(in: .whitespaces)
@@ -217,7 +237,7 @@ struct LibraryView: View {
             return true
         case Key.enter, Key.keypadEnter:
             guard !searchFocused, let index else { return false }
-            LibraryActions(item: list[index], packs: packs, model: model).primary()
+            LibraryActions(item: list[index], packs: packs, model: model, confirm: { confirming = $0 }).primary()
             return true
         default:
             return false
@@ -239,17 +259,24 @@ struct LibraryItem: Identifiable {
     let entry: PackCatalog.Entry?
     /// Set for games built into the app: they install instantly, with no download.
     var builtInIcon: GameIcon?
+    /// What the pack may use (clipboard, keep awake…), shown before install.
+    var capabilities: [PackCapability] = []
+    /// An SF Symbol icon (utilities), so nothing has to be downloaded to show it.
+    var symbol: String?
 
     init(entry: PackCatalog.Entry, installedVersion: String?) {
         id = entry.id; name = entry.name; description = entry.description; version = entry.version
         size = entry.size; sdkVersion = entry.sdkVersion; whatsNew = entry.whatsNew
-        self.installedVersion = installedVersion; self.entry = entry
+        self.installedVersion = installedVersion; self.entry = entry; symbol = entry.symbol
+        capabilities = PackCapability.list(entry.capabilities)
     }
 
     init(bundle: PackBundle) {
         id = bundle.id; name = bundle.manifest.name; description = bundle.manifest.description
         version = bundle.manifest.version; size = nil; sdkVersion = bundle.manifest.sdkVersion
         whatsNew = bundle.manifest.whatsNew; installedVersion = bundle.manifest.version; entry = nil
+        symbol = bundle.manifest.symbol
+        capabilities = PackCapability.list(bundle.manifest.capabilities)
     }
 
     init(builtIn info: GameInfo, installed: Bool) {
@@ -268,6 +295,8 @@ private struct LibraryActions {
     let item: LibraryItem
     let packs: PackManager
     let model: AppModel
+    /// Asks before installing a pack that uses capabilities (clipboard, keep awake…).
+    var confirm: (LibraryItem) -> Void = { _ in }
 
     enum Kind { case install, open, update, installing, needsNewerApp }
 
@@ -284,13 +313,20 @@ private struct LibraryActions {
         switch kind {
         case .install where item.isBuiltIn:
             InstalledGames.shared.install(item.id)
+        case .install where !item.capabilities.isEmpty:
+            confirm(item)
         case .install, .update:
-            if let entry = item.entry { Task { await packs.install(entry) } }
+            install()
         case .open:
             model.openGame(item.id)
         case .installing, .needsNewerApp:
             break
         }
+    }
+
+    /// Downloads and installs (after any confirmation).
+    func install() {
+        if let entry = item.entry { Task { await packs.install(entry) } }
     }
 }
 
@@ -305,7 +341,9 @@ private struct LibraryRow: View {
     @Environment(PackManager.self) private var packs
     @State private var downloadedIcon: NSImage?
 
-    private var actions: LibraryActions { LibraryActions(item: item, packs: packs, model: model) }
+    let confirm: () -> Void
+
+    private var actions: LibraryActions { LibraryActions(item: item, packs: packs, model: model, confirm: { _ in confirm() }) }
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -317,6 +355,11 @@ private struct LibraryRow: View {
                 Text(item.description)
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                if !item.capabilities.isEmpty {
+                    Text("Uses: " + item.capabilities.map(\.short).joined(separator: ", "))
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 detailLine
             }
             .accessibilityElement(children: .combine)
@@ -331,7 +374,7 @@ private struct LibraryRow: View {
         .padding(.vertical, 10)
         .background(isSelected ? Tokens.fillHover : .clear)
         .task(id: item.entry?.iconSha256) {
-            if library.icon(forPackID: item.id) == nil, let entry = item.entry {
+            if item.symbol == nil, library.icon(forPackID: item.id) == nil, let entry = item.entry {
                 downloadedIcon = await packs.icon(for: entry)
             }
         }
@@ -340,6 +383,8 @@ private struct LibraryRow: View {
     @ViewBuilder private var icon: some View {
         if let builtIn = item.builtInIcon {
             GameIconView(icon: builtIn, size: 32)
+        } else if let symbol = item.symbol {
+            GameIconView(icon: .symbol(symbol), size: 32)
         } else if let image = library.icon(forPackID: item.id) ?? downloadedIcon {
             GameIconView(icon: .image(image), size: 32)
         } else {
@@ -403,6 +448,7 @@ private struct LibraryRow: View {
     private var accessibilityText: String {
         var parts = [item.name, item.isInstalled ? "installed" : "not installed"]
         parts.append(item.isBuiltIn ? "built in" : "version \(item.installedVersion ?? item.version)")
+        if !item.capabilities.isEmpty { parts.append("uses " + item.capabilities.map(\.short).joined(separator: ", ")) }
         if let error = packs.errors[item.id] { parts.append(error) }
         return parts.joined(separator: ", ")
     }

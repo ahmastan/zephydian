@@ -1,0 +1,11 @@
+{
+  "id": "awake",
+  "name": "Awake",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 2,
+  "description": "Keep your Mac from sleeping, for a while or until you turn it off.",
+  "symbol": "cup.and.saucer",
+  "capabilities": ["power.awake"],
+  "whatsNew": "First release."
+}

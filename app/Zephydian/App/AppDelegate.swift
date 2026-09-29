@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import UserNotifications
 
 /// Creates and connects the app's pieces: settings, the panel, the menu bar icon and the corner trigger.
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -8,10 +9,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let notes = NotesStore()
     private let mouse = MouseMonitor()
     private let hotKey = GlobalHotKey()
-    private var registeredShortcut: GlobalShortcut?
+    private var registeredShortcut: KeyShortcut??
     private var panel: PanelController!
     private var statusItem: StatusItemController!
     private var cornerTrigger: CornerTrigger!
+    private let notificationPresenter = NotificationPresenter()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         notes.load()
@@ -50,6 +52,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         PackLibrary.shared.refresh()
         packs.scheduleDailyCheck()
 
+        // Utilities' background services come back as they were: timers, clipboard recording, shortcuts.
+        let services = PackServices.shared
+        services.settings = settings
+        services.hidePanel = { [weak self] in self?.panel.hide() }
+        services.shortcuts.onOpen = { [weak self] id in
+            guard let self, !self.model.isOnboarding else { return }
+            // A screenshot utility's shortcut takes an Area screenshot straight away.
+            if PackLibrary.shared.packs.first(where: { $0.id == id })?.manifest.capabilities?.contains("screen.capture") == true {
+                services.capture.capture(packID: id, mode: .area) { _, _ in }
+                return
+            }
+            // Pressed again while that utility is showing: close the panel, like the main shortcut.
+            if self.panel.isOpen && self.model.isShowingGame && self.model.gameID == id {
+                self.panel.hide()
+                return
+            }
+            self.model.closeLibrary()
+            self.model.tab = .utilities
+            self.model.openGame(id)
+            self.panel.show()
+        }
+        services.restore(PackLibrary.shared.packs.filter { $0.kind == .utility })
+        if Bundle.main.bundleIdentifier != nil {
+            UNUserNotificationCenter.current().delegate = notificationPresenter
+        }
+
         hotKey.onPress = { [weak self] in
             guard let self, !self.model.isOnboarding else { return }
             self.panel.toggle()
@@ -82,13 +110,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func applySettings() {
         statusItem.apply(icon: settings.menuBarIcon)
+        statusItem.setServiceActive(PackServices.shared.colorsJet, color: settings.accent.nsColor)
         cornerTrigger.reposition()
         panel.applyAppearance()
         panel.applyMaterial()
         panel.reposition()
-        if settings.globalShortcut != registeredShortcut {
-            registeredShortcut = settings.globalShortcut
-            model.shortcutAvailable = hotKey.register(settings.globalShortcut)
+        if registeredShortcut == nil || registeredShortcut! != settings.panelShortcut {
+            registeredShortcut = .some(settings.panelShortcut)
+            model.shortcutAvailable = hotKey.register(settings.panelShortcut)
         }
     }
 
@@ -100,12 +129,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = settings.corner
             _ = settings.displayName
             _ = settings.panelStyle
-            _ = settings.globalShortcut
+            _ = settings.panelShortcut
+            _ = settings.accent
+            _ = PackServices.shared.colorsJet
         } onChange: { [weak self] in
             Task { @MainActor in
                 self?.applySettings()
                 self?.observeSettings()
             }
         }
+    }
+}
+
+/// Shows timer notifications even while Zephydian is the active app (macOS hides them otherwise).
+final class NotificationPresenter: NSObject, UNUserNotificationCenterDelegate {
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification)
+        async -> UNNotificationPresentationOptions {
+        [.banner, .list]
     }
 }

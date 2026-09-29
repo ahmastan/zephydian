@@ -19,6 +19,10 @@ nonisolated struct PackCatalog: Codable, Equatable {
         var iconURL: String
         var iconSha256: String
         var sourceHash: String
+        /// An SF Symbol icon (utilities), shown before install without downloading icon.png.
+        var symbol: String?
+        /// What the pack may use; shown before install.
+        var capabilities: [String]?
     }
 
     var format: Int
@@ -238,12 +242,14 @@ final class PackManager {
 
     /// Removes a pack. Its saved games and best scores stay for a reinstall unless `deleteProgress`.
     func uninstall(_ id: String, deleteProgress: Bool) {
+        PackServices.shared.removeData(for: id)
         try? FileManager.default.removeItem(at: directory.appending(path: id, directoryHint: .isDirectory))
         if deleteProgress {
             try? FileManager.default.removeItem(at: dataDirectory.appending(path: "\(id).json"))
             defaults.removeObject(forKey: "pack.\(id).best")
             defaults.removeObject(forKey: "pack.\(id).bestTime")
         }
+        defaults.removeObject(forKey: PackRuntime.tileKey(id))
         defaults.removeObject(forKey: "packs.updated.\(id)")
         errors[id] = nil
         pendingUpdates.remove(id)

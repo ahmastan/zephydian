@@ -31,6 +31,7 @@ struct RootView: View {
                     Group {
                         switch model.tab {
                         case .games: HomeGrid()
+                        case .utilities: UtilitiesGrid()
                         case .notes: NotesView()
                         case .settings: SettingsView()
                         }

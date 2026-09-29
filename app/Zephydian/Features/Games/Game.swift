@@ -108,7 +108,13 @@ enum GameRegistry {
                  makeSession: { NinesGame() }, stat: { NinesGame.tileStat }, summary: "Fill the grid with 1 to 9, no repeats."),
     ]
 
-    static func info(for id: String?) -> GameInfo? { all.first { $0.id == id } }
+    /// Any tile the panel can open: a game, or a utility.
+    static func info(for id: String?) -> GameInfo? { (all + UtilityRegistry.all).first { $0.id == id } }
+}
+
+/// Every installed utility (all of them are packs; none come preinstalled).
+enum UtilityRegistry {
+    static var all: [GameInfo] { PackLibrary.shared.utilities }
 }
 
 // MARK: - Shared helpers

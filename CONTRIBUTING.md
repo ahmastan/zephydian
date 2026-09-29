@@ -31,11 +31,11 @@ app/
     ├── Core/         Corner trigger, floating panel, settings, themes
     ├── UI/           Shared views (root tabs, settings)
     ├── Features/
-    │   ├── Notes/    Quick Notes, the first utility
+    │   ├── Notes/    Quick Notes
     │   └── Games/    Game protocol, registry, and the built-in games
-    ├── Packs/        The pack runtime (JavaScriptCore), installer and Library data
+    ├── Packs/        The pack runtime (JavaScriptCore), native controls and services for utilities, installer and Library data
     └── Resources/    Assets and word lists
-packs/            Pack sources, one folder per pack (published by .github/workflows/packs.yml)
+packs/            Pack sources (games/ and utilities/), one folder per pack (published by .github/workflows/packs.yml)
 docs/PACKS.md     How to make a pack
 scripts/packs.swift  Checks, builds and signs packs
 ```
@@ -45,15 +45,15 @@ scripts/packs.swift  Checks, builds and signs packs
 - **App icon:** made in Apple's Icon Composer (`assets/brand/AppIcon.icon`). Edit it there, then copy it to `app/Zephydian/Resources/AppIcon.icon`.
 - **Word lists:** `python3 scripts/build-wordlists.py path/to/scowl` (see the script's header for details).
 
-## Making a new game (a pack)
+## Making a new game or utility (a pack)
 
-New games, and soon new utilities, are **packs**: small JavaScript programs that people install from the in-app Library. They aren't compiled into the app. Everything you need is in **[docs/PACKS.md](docs/PACKS.md)**:
+New games and utilities are **packs**: small JavaScript programs that people install from the in-app Library. They aren't compiled into the app. Everything you need is in **[docs/PACKS.md](docs/PACKS.md)**:
 
-1. Create `packs/games/<id>/` with `manifest.json`, `main.js` and a 64×64 `icon.png`. Switch (`packs/games/switch/`) is a complete example.
+1. Create `packs/games/<id>/` with `manifest.json`, `main.js` and a 64×64 `icon.png`, or `packs/utilities/<id>/` with `manifest.json`, `main.js` and an SF Symbol name in the manifest. Switch (`packs/games/switch/`) and the utilities in `packs/utilities/` are complete examples.
 2. Test it in a debug build by copying the folder into the developer folder described in the guide.
 3. Run `swift scripts/packs.swift check packs`, then open a pull request.
 
-Packs follow the same rules as the rest of the app: an original single-word name for games, keyboard support where it makes sense, readable in light and dark mode, and no work while the game isn't on screen (the SDK's loop already stops when the panel hides).
+Packs follow the same rules as the rest of the app: an original single-word name for games, only the capabilities a utility really needs, keyboard support where it makes sense, readable in light and dark mode, and no work while the game isn't on screen (the SDK's loop already stops when the panel hides).
 
 ## Working on the built-in games
 
