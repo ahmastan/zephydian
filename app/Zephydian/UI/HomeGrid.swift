@@ -3,6 +3,7 @@ import SwiftUI
 /// The Games tab: a 3-column grid of game tiles. Reopening a paused game's tile resumes it where you left off.
 struct HomeGrid: View {
     @Environment(AppModel.self) private var model
+    @Environment(PackLibrary.self) private var packs
 
     var body: some View {
         ScrollView {
@@ -10,11 +11,14 @@ struct HomeGrid: View {
                 ForEach(GameRegistry.all) { info in
                     GameTile(info: info) { model.openGame(info.id) }
                 }
+                GetMoreTile { model.openLibrary() }
             }
 
         }
         .contentMargins(.horizontal, 16, for: .scrollContent)
         .contentMargins(.bottom, 16, for: .scrollContent)
+        .onAppear { packs.refresh() }
+        .onChange(of: model.panelOpenCount) { packs.refresh() }
     }
 }
 
@@ -38,8 +42,8 @@ private struct GameTile: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .aspectRatio(1, contentMode: .fit)
             .overlay(alignment: .topTrailing) {
-                if !isPlayable {
-                    Text("SOON")
+                if let badge = info.badge ?? (isPlayable ? nil : "SOON") {
+                    Text(badge)
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 5).padding(.vertical, 2)
@@ -52,6 +56,27 @@ private struct GameTile: View {
         .buttonStyle(TileButtonStyle())
         .disabled(!isPlayable)
         .accessibilityLabel("\(info.name), \(info.stat())")
+    }
+}
+
+/// The last tile: opens the Library, where more games are installed.
+private struct GetMoreTile: View {
+    let open: () -> Void
+
+    var body: some View {
+        Button(action: open) {
+            VStack(spacing: 3) {
+                GameIconView(icon: .symbol("plus"))
+                    .padding(.bottom, 6)
+                Text("Get more").font(.system(size: 12, weight: .medium))
+                Text("Library").font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 6)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .aspectRatio(1, contentMode: .fit)
+        }
+        .buttonStyle(TileButtonStyle())
+        .accessibilityLabel("Get more games from the Library")
     }
 }
 

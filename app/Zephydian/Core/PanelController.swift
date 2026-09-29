@@ -60,7 +60,8 @@ final class PanelController: NSObject {
         self.model = model
         self.notes = notes
         panel = FloatingPanel(size: Tokens.panelSize)
-        let hostingView = NSHostingView(rootView: RootView().environment(settings).environment(model).environment(notes))
+        let hostingView = NSHostingView(rootView: RootView().environment(settings).environment(model).environment(notes)
+            .environment(PackLibrary.shared).environment(PackManager.shared))
         hostingView.sizingOptions = []
         hosting = hostingView
         super.init()
@@ -397,6 +398,8 @@ final class PanelController: NSObject {
                 finishOnboarding()
             } else if model.isShowingGame {
                 model.closeGame()
+            } else if model.isShowingLibrary {
+                model.closeLibrary()
             } else {
                 hide()
             }
@@ -406,7 +409,10 @@ final class PanelController: NSObject {
         if model.isShowingGame, !flags.contains(.command), let game = model.gameSession, game.handleKey(event) {
             return true
         }
-        if model.tab == .notes, !model.isShowingGame, !model.isOnboarding, handleNotesKey(event, flags: flags) {
+        if model.isShowingLibrary, !model.isShowingGame, !flags.contains(.command), model.libraryKeyHandler?(event) == true {
+            return true
+        }
+        if model.tab == .notes, !model.isShowingGame, !model.isShowingLibrary, !model.isOnboarding, handleNotesKey(event, flags: flags) {
             return true
         }
         guard flags == .command, let key = event.charactersIgnoringModifiers?.lowercased() else { return false }
@@ -418,8 +424,10 @@ final class PanelController: NSObject {
         switch key {
         case "1", "2", "3", ",":
             if model.isShowingGame { model.closeGame() }
+            model.closeLibrary()
             model.tab = key == "1" ? .games : key == "2" ? .notes : .settings
         case "w": hide()
+        case "f" where model.isShowingLibrary && !model.isShowingGame: model.librarySearchRequest += 1
         case "z" where model.isShowingGame: return model.gameSession?.undo() ?? false
         default: return false
         }

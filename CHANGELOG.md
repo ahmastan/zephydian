@@ -7,6 +7,19 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-28
+
+### Added
+- **The Library.** Open **Get more** at the end of the Games grid to install or remove games. New games arrive as **packs**: small JavaScript programs that Zephydian runs in a locked-down sandbox and draws natively.
+- **Switch**, the first pack: flip a light and its neighbours until the board is dark, in three difficulties.
+- **Settings → Packs**: a switch for the daily update check, and **Check now**.
+- A guide for making packs: `docs/PACKS.md`.
+
+### Changed
+- New installs start with Snake, Stackr and Five. The other built-in games install instantly from the Library. Updating keeps every game you've already played.
+- Any game can be removed, keeping its progress for a reinstall or deleting it too.
+- Zephydian now connects to the internet, but only to download games you choose from the Library and, about once a day, to update them. Downloads are signed and verified. See `SECURITY.md`.
+
 ## [0.3.0] - 2026-09-28
 
 ### Changed

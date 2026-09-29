@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 
@@ -36,13 +37,25 @@ final class AppModel {
     /// True while the game screen is showing (instead of the tabs).
     private(set) var isShowingGame = false
 
+    /// True while the Library (the pack catalog) is showing. A game opened from it returns to it.
+    private(set) var isShowingLibrary = false
+    /// Bumped by ⌘F so the Library's search field takes the cursor.
+    var librarySearchRequest = 0
+    /// Arrow keys and Enter for the Library's rows (set by the Library while it's showing).
+    @ObservationIgnored var libraryKeyHandler: ((NSEvent) -> Bool)?
+
+    func openLibrary() { isShowingLibrary = true }
+    func closeLibrary() { isShowingLibrary = false }
+
     /// Stops Smart auto-hide while a game is open.
     var isPlayingGame: Bool { isShowingGame }
 
     func openGame(_ id: String) {
         guard let info = GameRegistry.info(for: id), let make = info.makeSession else { return }
-        if gameID != id || gameSession == nil {
+        let failedPack = (gameSession as? PackSession)?.hasFailed == true
+        if gameID != id || gameSession == nil || info.reloadsOnOpen || failedPack {
             gameSession?.pause()
+            if let old = gameID, old != id { gameDidClose(old) }
             gameSession = make()
             gameID = id
         }
@@ -52,12 +65,30 @@ final class AppModel {
     func closeGame() {
         gameSession?.pause()
         isShowingGame = false
+        if let gameID { gameDidClose(gameID) }
+    }
+
+    /// After a pack is installed, updated or removed, a paused pack game kept in the background is
+    /// dropped, so reopening it loads the new files. Its progress is in its own storage.
+    func discardHiddenPackSession() {
+        guard !isShowingGame, gameSession is PackSession else { return }
+        gameSession = nil
+        gameID = nil
+    }
+
+    /// Drops the paused game kept in the background if it's the one being removed.
+    func discardHiddenSession(for id: String) {
+        guard !isShowingGame, gameID == id else { return }
+        gameSession = nil
+        gameID = nil
     }
 
     // Actions the views can trigger. Wired up by AppDelegate.
     @ObservationIgnored var closePanel: () -> Void = {}
     @ObservationIgnored var startOnboarding: () -> Void = {}
     @ObservationIgnored var finishOnboarding: () -> Void = {}
+    /// A game was closed or replaced by another one (lets a waiting pack update install).
+    @ObservationIgnored var gameDidClose: (String) -> Void = { _ in }
 
     init() {
         tab = UserDefaults.standard.string(forKey: "lastTab").flatMap(Tab.init(rawValue:)) ?? .games

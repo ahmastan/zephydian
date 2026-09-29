@@ -32,8 +32,12 @@ app/
     ├── UI/           Shared views (root tabs, settings)
     ├── Features/
     │   ├── Notes/    Quick Notes, the first utility
-    │   └── Games/    Game protocol, registry, and one folder per game
+    │   └── Games/    Game protocol, registry, and the built-in games
+    ├── Packs/        The pack runtime (JavaScriptCore), installer and Library data
     └── Resources/    Assets and word lists
+packs/            Pack sources, one folder per pack (published by .github/workflows/packs.yml)
+docs/PACKS.md     How to make a pack
+scripts/packs.swift  Checks, builds and signs packs
 ```
 
 ## Regenerating assets
@@ -41,17 +45,23 @@ app/
 - **App icon:** made in Apple's Icon Composer (`assets/brand/AppIcon.icon`). Edit it there, then copy it to `app/Zephydian/Resources/AppIcon.icon`.
 - **Word lists:** `python3 scripts/build-wordlists.py path/to/scowl` (see the script's header for details).
 
-## Adding a new game
+## Making a new game (a pack)
 
-1. Create a folder `app/Zephydian/Features/Games/<YourGame>/`.
-2. Create an `@Observable` class that conforms to `GameSession` (in `Features/Games/Game.swift`): score text, hint line, pause/resume, `handleKey(_:)` and `makeView()`. `SnakeGame.swift` is a compact example to copy from.
-3. Register it with one line in `GameRegistry.all` (same file): id, name, SF Symbol and a "best score" label.
-4. Performance rules:
-   - Real-time games must use the shared `GameLoop` and stop it in `pause()`. The app calls `pause()` whenever the panel hides or you leave the game. **Never** start your own always-running `Timer`.
-   - Turn-based and grid games shouldn't use a loop at all. A game clock (like in Mines and Nines) is fine: run it with `GameLoop` only while the game is being played.
-   - Prefer SwiftUI `Canvas`, shapes, and SF Symbols over large image assets.
-5. Make sure the game is fully playable with the keyboard, and add VoiceOver labels to its controls.
-6. Optional extras: `makeHeaderAccessory()` puts a menu in the header (difficulty, new game; style it with `.headerMenuStyle()`), and `undo()` handles ⌘Z. `MinesGame` and `NinesGame` show both.
+New games, and soon new utilities, are **packs**: small JavaScript programs that people install from the in-app Library. They aren't compiled into the app. Everything you need is in **[docs/PACKS.md](docs/PACKS.md)**:
+
+1. Create `packs/games/<id>/` with `manifest.json`, `main.js` and a 64×64 `icon.png`. Switch (`packs/games/switch/`) is a complete example.
+2. Test it in a debug build by copying the folder into the developer folder described in the guide.
+3. Run `swift scripts/packs.swift check packs`, then open a pull request.
+
+Packs follow the same rules as the rest of the app: an original single-word name for games, keyboard support where it makes sense, readable in light and dark mode, and no work while the game isn't on screen (the SDK's loop already stops when the panel hides).
+
+## Working on the built-in games
+
+The built-in games (Snake, Stackr, Five and the others) live in `app/Zephydian/Features/Games/`. Each is an `@Observable` class conforming to `GameSession` in `Game.swift`, registered in `GameRegistry.builtIn`.
+
+- Real-time games must use the shared `GameLoop` and stop it in `pause()`. The app calls `pause()` whenever the panel hides or you leave the game. **Never** start your own always-running `Timer`.
+- Turn-based games shouldn't use a loop at all. A game clock (like in Mines and Nines) is fine: run it with `GameLoop` only while the game is being played.
+- Keep every registry `id` and saved key unchanged, so players keep their progress.
 
 ## Pull requests
 
