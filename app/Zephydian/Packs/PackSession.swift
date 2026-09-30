@@ -23,11 +23,17 @@ final class PackSession: GameSession, PackHost {
     @ObservationIgnored private var toastTask: Task<Void, Never>?
     @ObservationIgnored private var images: [String: NSImage] = [:]
 
-    init(bundle: PackBundle) {
+    init(bundle: PackBundle, mode: PackRuntime.Mode = .panel) {
         self.bundle = bundle
         hintText = bundle.manifest.hint ?? ""
-        runtime = PackRuntime(bundle: bundle, host: self)
+        runtime = PackRuntime(bundle: bundle, host: self, mode: mode)
         failure = runtime.failure
+    }
+
+    /// Set by the pack's own window (SDK 3).
+    var windowHost: PackWindowHost? {
+        get { runtime.windowHost }
+        set { runtime.windowHost = newValue }
     }
 
     var hasFailed: Bool { failure != nil }
@@ -90,6 +96,22 @@ final class PackSession: GameSession, PackHost {
         return failure == nil && runtime.undo()
     }
 
+    /// ⇧⌘Z in a pack's window.
+    func redo() -> Bool {
+        if NSApp.keyWindow?.firstResponder is NSText { return false }
+        return failure == nil && runtime.redo()
+    }
+
+    /// The window's close button or ⌘W: false if the pack keeps it open for now.
+    func shouldClose() -> Bool { failure != nil || runtime.shouldClose() }
+
+    /// A key in the pack's own window: like the panel's, plus Esc and ⌘ combinations (⌘C, ⌘S…).
+    func windowKey(_ event: NSEvent) -> Bool {
+        guard failure == nil, !(event.window?.firstResponder is NSText),
+              let key = Self.packKey(event, window: true) else { return false }
+        return runtime.key(key)
+    }
+
     func makeView() -> AnyView { isUtility ? AnyView(UtilityView(session: self)) : AnyView(PackView(session: self)) }
 
     func makeHeaderAccessory() -> AnyView? {
@@ -135,11 +157,11 @@ final class PackSession: GameSession, PackHost {
 
     /// An image from the pack's assets/ folder (loaded once).
     func image(named name: String) -> NSImage? {
-        // Pictures from the clipboard history, for utilities allowed to read it.
-        if name.hasPrefix("screenshot:") {
-            guard bundle.manifest.capabilities?.contains("screen.capture") == true else { return nil }
-            return PackServices.shared.capture.thumbnail(String(name.dropFirst(11)))
+        // Screenshots and an image editor's pictures, for utilities allowed to use them.
+        if name.hasPrefix("screenshot:") || name.hasPrefix("image:") {
+            return PackServices.shared.images.picture(name, packID: bundle.id, capabilities: Set(bundle.manifest.capabilities ?? []))
         }
+        // Pictures from the clipboard history, for utilities allowed to read it.
         if name.hasPrefix("clipboard:") {
             guard bundle.manifest.capabilities?.contains("clipboard.read") == true else { return nil }
             return PackServices.shared.clipboard.thumbnail(packID: bundle.id, id: String(name.dropFirst(10)))
@@ -172,13 +194,14 @@ final class PackSession: GameSession, PackHost {
 
     // MARK: Helpers
 
-    private static func packKey(_ event: NSEvent) -> PackKey? {
-        let names: [UInt16: String] = [
+    private static func packKey(_ event: NSEvent, window: Bool = false) -> PackKey? {
+        var names: [UInt16: String] = [
             Key.left: "ArrowLeft", Key.right: "ArrowRight", Key.up: "ArrowUp", Key.down: "ArrowDown",
             Key.enter: "Enter", Key.keypadEnter: "Enter", Key.space: " ", Key.delete: "Backspace", Key.forwardDelete: "Backspace",
         ]
+        if window { names[53] = "Escape" }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        guard !flags.contains(.command), !flags.contains(.control) else { return nil }
+        guard window || !flags.contains(.command), !flags.contains(.control) else { return nil }
         var name = names[event.keyCode]
         if name == nil, let chars = event.charactersIgnoringModifiers?.lowercased(), chars.count == 1,
            let scalar = chars.unicodeScalars.first, scalar.value >= 0x20, scalar.value != 0x7F, !(0xF700...0xF8FF).contains(scalar.value) {
@@ -186,7 +209,7 @@ final class PackSession: GameSession, PackHost {
         }
         guard let name else { return nil }
         return PackKey(key: name, shift: flags.contains(.shift), option: flags.contains(.option),
-                       isRepeat: event.type == .keyDown && event.isARepeat)
+                       isRepeat: event.type == .keyDown && event.isARepeat, command: flags.contains(.command))
     }
 
     private static func hex(_ color: NSColor) -> String {
@@ -286,7 +309,9 @@ struct PackView: View {
             let fill = style.fill ?? (style.stroke == nil ? .theme("text") : nil)
             if let fill { context.fill(path, with: .color(color(fill))) }
             if let stroke = style.stroke, style.lineWidth > 0 {
-                context.stroke(path, with: .color(color(stroke)), lineWidth: style.lineWidth)
+                context.stroke(path, with: .color(color(stroke)),
+                               style: StrokeStyle(lineWidth: style.lineWidth, lineCap: style.round ? .round : .butt,
+                                                  lineJoin: style.round ? .round : .miter))
             }
         }
 
@@ -298,6 +323,20 @@ struct PackView: View {
                 paint(radius > 0 ? Path(roundedRect: rect, cornerRadius: radius, style: .continuous) : Path(rect), style)
             case let .circle(center, radius, style):
                 paint(Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: radius * 2, height: radius * 2)), style)
+            case let .ellipse(rect, style):
+                paint(Path(ellipseIn: rect), style)
+            case let .shadow(c, radius, dx, dy):
+                context.addFilter(.shadow(color: color(c), radius: radius, x: dx, y: dy))
+            case let .symbol(name, center, size, c):
+                let symbol = Text(Image(systemName: name)).font(.system(size: size * 0.8)).foregroundStyle(color(c))
+                context.draw(symbol, at: center, anchor: .center)
+            case let .gradient(rect, radius, colors):
+                let path = radius > 0 ? Path(roundedRect: rect, cornerRadius: radius, style: .continuous) : Path(rect)
+                let stops = colors.isEmpty ? [Color.clear] : colors.map(color)
+                context.fill(path, with: .linearGradient(Gradient(colors: stops), startPoint: CGPoint(x: rect.minX, y: rect.minY),
+                                                         endPoint: CGPoint(x: rect.maxX, y: rect.maxY)))
+            case let .clip(rect, radius):
+                context.clip(to: radius > 0 ? Path(roundedRect: rect, cornerRadius: radius, style: .continuous) : Path(rect))
             case let .line(a, b, c, width, round):
                 var path = Path()
                 path.move(to: a)
@@ -317,8 +356,9 @@ struct PackView: View {
                     .foregroundStyle(color(c))
                 let anchor: UnitPoint = switch align { case .left: .leading; case .center: .center; case .right: .trailing }
                 context.draw(text, at: point, anchor: anchor)
-            case let .image(name, rect, opacity):
-                guard let nsImage = image(name) else { continue }
+            case let .image(name, rect, opacity, pixelate):
+                guard var nsImage = image(name) else { continue }
+                if pixelate > 0, let blocks = PackImages.pixelated(nsImage, block: pixelate) { nsImage = blocks }
                 var copy = context
                 copy.opacity *= opacity
                 copy.draw(Image(nsImage: nsImage), in: rect)

@@ -73,6 +73,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.model.openGame(id)
             self.panel.show()
         }
+        // A screenshot's Edit button opens the installed image editor (Markup) in its own window.
+        services.imageEditor = { PackLibrary.shared.packs.first(where: \.isImageEditor)?.id }
+        services.openInEditor = { packID, shotID in
+            guard let bundle = PackLibrary.shared.packs.first(where: { $0.id == packID && $0.isImageEditor }),
+                  let image = services.images.fromScreenshot(shotID, packID: packID) else { return }
+            services.windows.open(bundle, input: PackRuntime.jsonString(["image": "image:\(image)"]))
+        }
         services.restore(PackLibrary.shared.packs.filter { $0.kind == .utility })
         if Bundle.main.bundleIdentifier != nil {
             UNUserNotificationCenter.current().delegate = notificationPresenter
@@ -96,13 +103,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Launching Zephydian again while it's running (e.g. from Finder or Spotlight) opens Settings.
-    /// This is the way back in if the menu bar icon is hidden.
+    /// This is the way back in if the menu bar icon is hidden. While a utility's window is open (and
+    /// Zephydian is in the Dock), clicking the Dock icon brings that window forward instead.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if PackServices.shared.windows.showAll() { return false }
         openSettings()
         return false
     }
 
-    private func openSettings() {
+    func openSettings() {
         guard !model.isOnboarding else { return }
         model.tab = .settings
         panel.show()
@@ -113,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.setServiceActive(PackServices.shared.colorsJet, color: settings.accent.nsColor)
         cornerTrigger.reposition()
         panel.applyAppearance()
+        PackServices.shared.windows.applyAppearance(settings.appearance.nsAppearance)
         panel.applyMaterial()
         panel.reposition()
         if registeredShortcut == nil || registeredShortcut! != settings.panelShortcut {

@@ -23,17 +23,29 @@ nonisolated struct PackUINode: Equatable, Identifiable {
     enum Kind: Equatable {
         case text(String, style: TextStyle, align: PackShape.Align, selectable: Bool, color: PackColor?)
         case field(value: String, placeholder: String, multiline: Bool, lines: Int, mono: Bool)
-        case button(label: String, symbol: String?, style: String, disabled: Bool)
+        /// `badge`: a small letter in a toolbar button's corner (its key). `bar`: a line-weight glyph
+        /// of that thickness instead of a symbol.
+        case button(label: String, symbol: String?, style: String, disabled: Bool, selected: Bool, badge: String?, bar: Double)
+        /// A button with a menu of choices (SDK 3). With `onPress` the button itself does that, and
+        /// the arrow next to it opens the menu.
+        case menu(label: String, symbol: String?, items: [String], selected: Int, primary: Bool, prominent: Bool)
+        /// Three slots in a row, the middle one centered on the row whatever the sides hold (SDK 3).
+        case band
+        /// Zephydian's jet logo, `size` points tall (SDK 3).
+        case logo(size: Double)
         case toggle(label: String, value: Bool)
         case slider(value: Double, min: Double, max: Double, step: Double)
         case segmented(options: [String], selected: Int)
         case picker(label: String, options: [String], selected: Int)
         case copy(text: String, label: String, concealed: Bool)
-        case stack(vertical: Bool, spacing: Double, align: PackShape.Align)
+        /// `fill`: a row that takes the height it's given (a tool rail beside a fit canvas), aligned to the top.
+        case stack(vertical: Bool, spacing: Double, align: PackShape.Align, fill: Bool)
         case section(title: String?)
         case list(items: [ListItem], selected: String?, empty: String?)
-        case canvas(shapes: [PackShape], width: Double?, height: Double)
-        case swatch(PackColor, size: Double, selected: Bool, pressable: Bool)
+        case canvas(PackCanvas)
+        /// A floating bar of controls (a window's tools), on glass. Vertical for a tool rail.
+        case toolbar(vertical: Bool)
+        case swatch(PackColor, size: Double, selected: Bool, pressable: Bool, round: Bool)
         case disclosure(label: String, expanded: Bool)
         /// The utility's own global shortcut (the `shortcut` capability), recorded natively.
         case shortcut(label: String)
@@ -84,7 +96,16 @@ nonisolated struct PackUINode: Equatable, Identifiable {
             kind = .field(value: s("value") ?? "", placeholder: s("placeholder") ?? "", multiline: b("multiline"),
                           lines: Int(min(max(d("lines", 4), 1), 30)), mono: b("mono"))
         case "button":
-            kind = .button(label: s("label") ?? "", symbol: s("symbol"), style: s("style") ?? "plain", disabled: b("disabled"))
+            kind = .button(label: s("label") ?? "", symbol: s("symbol"), style: s("style") ?? "plain", disabled: b("disabled"), selected: b("selected"),
+                           badge: s("badge").map { String($0.prefix(2)) }, bar: min(max(d("bar"), 0), 12))
+        case "menu":
+            let on = Set(o["on"] as? [String] ?? [])
+            kind = .menu(label: s("label") ?? "", symbol: s("symbol"), items: strings("items"), selected: Int(d("selected", -1)),
+                         primary: on.contains("onPress"), prominent: s("style") == "prominent")
+        case "band":
+            kind = .band
+        case "logo":
+            kind = .logo(size: min(max(d("size", 28), 12), 96))
         case "toggle":
             kind = .toggle(label: s("label") ?? "", value: b("value"))
         case "slider":
@@ -97,7 +118,7 @@ nonisolated struct PackUINode: Equatable, Identifiable {
         case "copy":
             kind = .copy(text: s("text") ?? "", label: s("label") ?? "Copy", concealed: b("concealed"))
         case "row", "column":
-            kind = .stack(vertical: s("t") == "column", spacing: min(max(d("spacing", 8), 0), 64), align: align)
+            kind = .stack(vertical: s("t") == "column", spacing: min(max(d("spacing", 8), 0), 64), align: align, fill: b("fill"))
         case "section":
             kind = .section(title: s("title"))
         case "list":
@@ -111,10 +132,34 @@ nonisolated struct PackUINode: Equatable, Identifiable {
             kind = .list(items: Array(items), selected: s("selected"), empty: s("empty"))
         case "canvas":
             let shapes = try PackRuntime.parseShapes(o["shapes"] as? [Any] ?? [])
-            kind = .canvas(shapes: shapes, width: o["width"] == nil ? nil : min(max(d("width"), 1), 2000), height: min(max(d("height", 100), 1), 2000))
+            let handlers = Set(o["on"] as? [String] ?? [])
+            func size(_ v: Any?) -> CGSize? {
+                guard let f = v as? [String: Any], let w = (f["width"] as? NSNumber)?.doubleValue, let h = (f["height"] as? NSNumber)?.doubleValue,
+                      w.isFinite, h.isFinite, w >= 1, h >= 1 else { return nil }
+                return CGSize(width: min(w, PackImages.maxSide), height: min(h, PackImages.maxSide))
+            }
+            var ink: PackCanvas.Ink?
+            if let i = o["ink"] as? [String: Any] {
+                ink = .init(color: (i["color"] as? String).flatMap(PackColor.init) ?? .theme("accent"),
+                            width: min(max((i["width"] as? NSNumber)?.doubleValue ?? 3, 0.5), 400),
+                            opacity: min(max((i["opacity"] as? NSNumber)?.doubleValue ?? 1, 0.05), 1))
+            }
+            var edit: PackCanvas.TextEdit?
+            if let t = o["textEdit"] as? [String: Any] {
+                edit = .init(id: "\(t["id"] ?? "text")", x: (t["x"] as? NSNumber)?.doubleValue ?? 0, y: (t["y"] as? NSNumber)?.doubleValue ?? 0,
+                             text: t["text"] as? String ?? "", size: min(max((t["size"] as? NSNumber)?.doubleValue ?? 16, 4), 1000),
+                             color: (t["color"] as? String).flatMap(PackColor.init) ?? .theme("text"))
+            }
+            kind = .canvas(PackCanvas(shapes: shapes, width: o["width"] == nil ? nil : min(max(d("width"), 1), 2000),
+                                      height: min(max(d("height", 100), 1), 2000), fit: size(o["fit"]),
+                                      cursor: s("cursor"), ink: ink, textEdit: edit,
+                                      pointer: handlers.contains("onPointer"), stroke: handlers.contains("onStroke"),
+                                      hover: handlers.contains("onHover"), layout: handlers.contains("onLayout")))
+        case "toolbar":
+            kind = .toolbar(vertical: b("vertical"))
         case "swatch":
             kind = .swatch(s("color").flatMap(PackColor.init) ?? .theme("fill"), size: min(max(d("size", 28), 8), 200),
-                           selected: b("selected"), pressable: (o["on"] as? [String] ?? []).contains("onPress"))
+                           selected: b("selected"), pressable: (o["on"] as? [String] ?? []).contains("onPress"), round: s("shape") == "circle")
         case "shortcut":
             kind = .shortcut(label: s("label") ?? "Shortcut")
         case "disclosure":
@@ -127,6 +172,32 @@ nonisolated struct PackUINode: Equatable, Identifiable {
         let children = try (o["children"] as? [[String: Any]] ?? []).map { try parse($0, depth: depth + 1, count: &count) }
         return PackUINode(id: key, kind: kind, children: children, label: s("accessibilityLabel"))
     }
+}
+
+/// A `z.ui.canvas`. With `fit` it fills the space it's given and draws in its own units (an
+/// image's pixels), scaled to fit and centered; pointer events come back in those units (SDK 3).
+nonisolated struct PackCanvas: Equatable {
+    /// A freehand line drawn natively while the pointer is down, then handed to `onStroke`.
+    struct Ink: Equatable { var color: PackColor; var width: Double; var opacity: Double }
+    /// A text field over the canvas, at a point in canvas units (`onTextChange`, `onTextEnd`).
+    struct TextEdit: Equatable { var id: String; var x: Double; var y: Double; var text: String; var size: Double; var color: PackColor }
+
+    var shapes: [PackShape]
+    var width: Double?
+    var height: Double
+    var fit: CGSize?
+    /// "crosshair", "text", "move", "pointer", "resize-nwse", "resize-nesw", "resize-ns", "resize-ew",
+    /// or nil (the arrow).
+    var cursor: String?
+    var ink: Ink?
+    var textEdit: TextEdit?
+    /// Whether the pack listens for pointer events and strokes.
+    var pointer: Bool
+    var stroke: Bool
+    /// Whether the pack wants pointer moves with no button held (to change the cursor), and the
+    /// canvas's scale whenever it changes (to keep handles the same size on screen).
+    var hover = false
+    var layout = false
 }
 
 // MARK: - Drawing the tree
@@ -181,6 +252,8 @@ private struct PackNodeView: View {
     let node: PackUINode
     let session: PackSession
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.packInToolbar) private var inToolbar
+    @Environment(\.packToolbarVertical) private var toolbarVertical
 
     private func send(_ event: String, _ value: Any = NSNull()) { session.uiEvent(node.id, event, value) }
 
@@ -206,7 +279,38 @@ private struct PackNodeView: View {
             PackFieldView(value: value, placeholder: placeholder, multiline: multiline, lines: lines, mono: mono,
                           change: { send("onChange", $0) }, submit: { send("onSubmit", $0) })
 
-        case let .button(label, symbol, style, disabled):
+        case let .button(label, symbol, style, disabled, selected, badge, bar) where inToolbar:
+            ToolbarButton(label: label, symbol: symbol, selected: selected, destructive: style == "destructive",
+                          prominent: style == "prominent", badge: badge, bar: bar) { send("onPress") }
+                .disabled(disabled)
+
+        case let .menu(label, symbol, items, selected, primary, prominent):
+            PackMenuButton(label: label, symbol: symbol, items: items, selected: selected, primary: primary, prominent: prominent,
+                           inToolbar: inToolbar, press: { send("onPress") }, select: { send("onSelect", $0) })
+
+        case .logo(let size):
+            // The menu bar jet (a template image), in the text color.
+            Image("MenuBarIcon")
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .frame(width: size, height: size)
+                .foregroundStyle(Color.primary.opacity(0.92))
+                .accessibilityLabel("Zephydian")
+
+        case .band:
+            // The sides at the edges, the middle centered on the whole row.
+            ZStack {
+                if node.children.count > 1 { AnyView(PackNodeView(node: node.children[1], session: session)) }
+                HStack(spacing: 8) {
+                    if let first = node.children.first { AnyView(PackNodeView(node: first, session: session)) }
+                    Spacer(minLength: 8)
+                    if node.children.count > 2 { AnyView(PackNodeView(node: node.children[2], session: session)) }
+                }
+            }
+            .frame(maxWidth: .infinity)
+
+        case let .button(label, symbol, style, disabled, _, _, _):
             let button = Button(role: style == "destructive" ? .destructive : nil) { send("onPress") } label: {
                 if let symbol, !label.isEmpty { Label(label, systemImage: symbol) }
                 else if let symbol { Image(systemName: symbol).accessibilityLabel(label) }
@@ -226,6 +330,14 @@ private struct PackNodeView: View {
                     .labelsHidden()
             }
             .accessibilityElement(children: .combine)
+
+        case let .slider(value, lo, hi, step) where inToolbar:
+            Slider(value: Binding(get: { value }, set: { v in
+                send("onChange", step > 0 ? min(max(lo + ((v - lo) / step).rounded() * step, lo), hi) : v)
+            }), in: lo...hi)
+            .controlSize(.mini)
+            .frame(width: 84)
+            .accessibilityLabel(node.label ?? "Value")
 
         case let .slider(value, lo, hi, step):
             // Snaps to the step without tick marks, like the app's own sliders.
@@ -254,7 +366,11 @@ private struct PackNodeView: View {
             .disabled(text.isEmpty)
             .help("Copy to the clipboard")
 
-        case let .stack(vertical, spacing, align):
+        case let .stack(false, spacing, _, true):
+            HStack(alignment: .top, spacing: spacing) { children }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+        case let .stack(vertical, spacing, align, _):
             if vertical {
                 VStack(alignment: align == .center ? .center : align == .right ? .trailing : .leading, spacing: spacing) { children }
                     .frame(maxWidth: .infinity, alignment: align == .center ? .center : align == .right ? .trailing : .leading)
@@ -283,16 +399,64 @@ private struct PackNodeView: View {
                          select: { send("onSelect", $0) },
                          action: { id, index in send("onAction", ["id": id, "action": index]) })
 
-        case let .canvas(shapes, width, height):
+        case let .canvas(canvas) where canvas.fit != nil:
+            PackFitCanvas(canvas: canvas, session: session, send: send)
+                .id(node.id)
+
+        case let .canvas(canvas):
             let accent = settings.accent.color
             Canvas { context, size in
-                PackView.render(shapes, in: context, size: size, accent: accent, image: session.image(named:))
+                PackView.render(canvas.shapes, in: context, size: size, accent: accent, image: session.image(named:))
             }
-            .frame(width: width.map { CGFloat($0) }, height: height)
+            .frame(width: canvas.width.map { CGFloat($0) }, height: canvas.height)
             .frame(maxWidth: .infinity)
             .accessibilityHidden(true)
 
-        case let .swatch(color, size, selected, pressable):
+        case .toolbar(let vertical):
+            // A floating control bar: glass behind its controls (not a GlassGroup, which would draw
+            // the glass above them), Frosted's bar material on older macOS or in Frosted mode.
+            // A vertical one is a tool rail, a rounded rectangle concentric with the window's corners.
+            if vertical {
+                VStack(spacing: 2) { children }
+                    .environment(\.packInToolbar, true)
+                    .environment(\.packToolbarVertical, true)
+                    .controlSize(.small)
+                    .padding(5)
+                    .fixedSize()
+                    .glassSurface(in: RoundedRectangle(cornerRadius: 15, style: .continuous), fallback: .bar)
+                    .shadow(color: .black.opacity(0.18), radius: 16, y: 5)
+            } else {
+                HStack(spacing: 2) { children }
+                    .environment(\.packInToolbar, true)
+                    .controlSize(.small)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .fixedSize()
+                    .glassSurface(in: Capsule(), fallback: .bar)
+                    .shadow(color: .black.opacity(0.16), radius: 12, y: 3)
+            }
+
+        case let .swatch(color, size, selected, pressable, true):
+            // A color dot: the color in a circle, with a ring around the chosen one.
+            let dot = ZStack {
+                Circle().fill(PackView.color(color, accent: settings.accent.color))
+                    .overlay(Circle().strokeBorder(Color.primary.opacity(0.22), lineWidth: 0.5))
+                    .frame(width: size, height: size)
+                if selected { Circle().strokeBorder(Color.primary.opacity(0.9), lineWidth: 1.5).frame(width: size + 6, height: size + 6) }
+            }
+            .frame(width: size + 7, height: size + 7)
+            .scaleEffect(selected ? 1.05 : 1)
+            .contentShape(Circle())
+            if pressable {
+                Button { send("onPress") } label: { dot }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(node.label ?? "Color")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
+            } else {
+                dot.accessibilityHidden(true)
+            }
+
+        case let .swatch(color, size, selected, pressable, _):
             let shape = RoundedRectangle(cornerRadius: min(8, size / 4), style: .continuous)
             let swatch = shape
                 .fill(PackView.color(color, accent: settings.accent.color))
@@ -333,6 +497,8 @@ private struct PackNodeView: View {
         case let .shortcut(label):
             PackShortcutField(label: label, packID: session.bundle.id)
 
+        case .divider where inToolbar && toolbarVertical: Divider().frame(width: 22).padding(.vertical, 2)
+        case .divider where inToolbar: Divider().frame(height: 16).padding(.horizontal, 4)
         case .divider: Divider()
         case .spacer: Spacer(minLength: 0)
         }
@@ -468,11 +634,28 @@ private struct PackInSectionKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+private struct PackInToolbarKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+private struct PackToolbarVerticalKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
     /// True for controls inside a `z.ui.section` card.
     var packInSection: Bool {
         get { self[PackInSectionKey.self] }
         set { self[PackInSectionKey.self] = newValue }
+    }
+    /// True for controls inside a `z.ui.toolbar`.
+    var packInToolbar: Bool {
+        get { self[PackInToolbarKey.self] }
+        set { self[PackInToolbarKey.self] = newValue }
+    }
+    var packToolbarVertical: Bool {
+        get { self[PackToolbarVerticalKey.self] }
+        set { self[PackToolbarVerticalKey.self] = newValue }
     }
 }
 
@@ -498,5 +681,46 @@ private struct PackShortcutField: View {
             ShortcutWarning(text: ShortcutConflicts.warning(for: current, registered: !shortcuts.failed.contains(packID),
                                                             owner: packID, panel: settings.panelShortcut))
         }
+    }
+}
+
+// MARK: - A pack's own window (SDK 3)
+
+/// The screen of a pack's own window: its view tree filling the window (no scrolling, so a fit
+/// canvas takes the room that's left), plus the failure card and toasts.
+struct PackWindowView: View {
+    let session: PackSession
+    let close: () -> Void
+    @Environment(SettingsStore.self) private var settings
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .top) {
+                if let root = session.ui {
+                    PackNodeView(node: root, session: session)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                }
+                if let failure = session.failure {
+                    GameOverlay(title: "This utility stopped working",
+                                subtitle: session.bundle.isDev ? failure : "Close the window and open it again. If it keeps happening, remove it and install it again from the Library.") {
+                        Button("Close", action: close).prominentButtonStyle()
+                    }
+                }
+                if let toast = session.toast {
+                    GameToast(text: toast).id(toast).padding(.top, 48)
+                }
+            }
+            .onAppear {
+                session.updateTheme(dark: colorScheme == .dark, accent: settings.accent.nsColor)
+                session.setSize(proxy.size)
+            }
+            .onChange(of: proxy.size) { _, size in session.setSize(size) }
+        }
+        .tint(settings.accent.color)
+        .onChange(of: colorScheme) { _, scheme in session.updateTheme(dark: scheme == .dark, accent: settings.accent.nsColor) }
+        .onChange(of: settings.accent) { _, accent in session.updateTheme(dark: colorScheme == .dark, accent: accent.nsColor) }
+        .animation(.easeOut(duration: 0.2), value: session.toast)
     }
 }

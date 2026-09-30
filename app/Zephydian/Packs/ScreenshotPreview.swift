@@ -2,7 +2,8 @@ import AppKit
 import SwiftUI
 
 /// The small card that appears in the screen's bottom-right corner after a screenshot: a thumbnail
-/// with Copy, Save, Edit (when an editor utility is installed), Delete and Close. Left alone for a few
+/// (click it to open the shot in the image editor, when one is installed) with Copy, Save, Delete
+/// and Close. Left alone for a few
 /// seconds (and not hovered), it copies the shot and goes away. It's a floating control, so it's
 /// glass (the shared helpers; Frosted on older macOS).
 final class ScreenshotPreview {
@@ -61,21 +62,37 @@ private struct PreviewCard: View {
     let canEdit: Bool
     let act: (ScreenshotPreview.Action) -> Void
     let hover: (Bool) -> Void
+    @State private var hovering = false
 
     var body: some View {
         VStack(spacing: 10) {
-            Image(nsImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(maxWidth: 262, maxHeight: 124)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
-                .accessibilityLabel("Screenshot")
+            Button { if canEdit { act(.edit) } } label: {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 262, maxHeight: 124)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+                    .overlay {
+                        // A hint that the picture opens the editor.
+                        if canEdit && hovering {
+                            Image(systemName: "pencil.tip.crop.circle")
+                                .font(.system(size: 13, weight: .semibold))
+                                .padding(6)
+                                .glassSurface(in: Circle())
+                                .transition(.opacity)
+                        }
+                    }
+            }
+            .buttonStyle(.plain)
+            .disabled(!canEdit)
+            .onHover { inside in withAnimation(.easeOut(duration: 0.15)) { hovering = inside } }
+            .help(canEdit ? "Edit in Markup" : "")
+            .accessibilityLabel(canEdit ? "Edit the screenshot" : "Screenshot")
             GlassGroup(spacing: 6) {
                 HStack(spacing: 6) {
                     Button("Copy") { act(.copy) }
                     Button("Save") { act(.save) }
-                    if canEdit { Button("Edit") { act(.edit) } }
                     Button { act(.delete) } label: { Image(systemName: "trash") }
                         .glassIconButtonStyle()
                         .help("Delete the screenshot")

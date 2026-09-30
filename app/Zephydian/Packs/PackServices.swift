@@ -44,14 +44,16 @@ final class PackServices {
     @ObservationIgnored lazy var shortcuts = PackShortcuts()
     @ObservationIgnored lazy var system = SystemStats()
     @ObservationIgnored lazy var capture = ScreenCapture(services: self)
+    @ObservationIgnored lazy var images = PackImages(services: self)
+    @ObservationIgnored lazy var windows = PackWindows(services: self)
 
     /// Set by AppDelegate: hides the panel (before a screenshot), and the app's settings (for the
     /// look of the screenshot preview card).
     @ObservationIgnored var hidePanel: () -> Void = {}
     @ObservationIgnored var settings: SettingsStore?
 
-    /// An installed utility that edits images (its manifest `accepts` "image" and it may open a
-    /// window), for a screenshot's Edit button. Set up with Markup (17.5b).
+    /// The installed image editor (a utility whose manifest `handles` "image"), for a screenshot's
+    /// Edit button, and opening a screenshot in it. Set by AppDelegate.
     @ObservationIgnored var imageEditor: () -> String? = { nil }
     @ObservationIgnored var openInEditor: (_ packID: String, _ shotID: String) -> Void = { _, _ in }
 
@@ -99,6 +101,8 @@ final class PackServices {
     /// clipboard history, its shortcut) is deleted.
     func removeData(for packID: String) {
         stopAll(for: packID)
+        windows.closeAll(packID: packID)
+        images.removeData(packID: packID)
         timers.removeData(packID: packID)
         clipboard.removeData(packID: packID)
         shortcuts.remove(packID: packID)

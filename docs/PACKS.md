@@ -2,7 +2,7 @@
 
 New games and utilities come to Zephydian as **packs**. People install them from the **Library** inside the panel, and can remove them again. A pack is a small JavaScript program plus its data. Zephydian runs it with Apple's built-in JavaScriptCore and draws it natively, so a pack looks and feels like the rest of the app, Liquid Glass included.
 
-This guide covers **SDK version 2**. Version 1 brought games; version 2 adds **utilities**, whose screens are built from native controls, and **capabilities** for the few things a utility needs beyond its own screen (the clipboard, keeping the Mac awake and so on).
+This guide covers **SDK version 3**. Version 1 brought games. Version 2 added **utilities**, whose screens are built from native controls, and **capabilities** for the few things a utility needs beyond its own screen (the clipboard, keeping the Mac awake and so on). Version 3 lets a utility open **its own window** and **edit images**, with a canvas that takes the pointer.
 
 - [What a pack can and can't do](#what-a-pack-can-and-cant-do)
 - [Folder layout](#folder-layout)
@@ -13,6 +13,7 @@ This guide covers **SDK version 2**. Version 1 brought games; version 2 adds **u
 - [Colors](#colors)
 - [Utilities (SDK 2)](#utilities-sdk-2)
 - [Capabilities](#capabilities)
+- [Windows and image editing (SDK 3)](#windows-and-image-editing-sdk-3)
 - [A complete example](#a-complete-example)
 - [Testing your pack](#testing-your-pack)
 - [Submitting a pack](#submitting-a-pack)
@@ -78,7 +79,7 @@ Only these files are allowed: `manifest.json`, `main.js`, `icon.png`, and PNG, J
 | --- | --- |
 | `id` | Lowercase letters, digits and `-`, and the same as the folder name. It never changes: saved data is kept under it. |
 | `name` | Shown on the tile and in the Library. **Games use a single original word** that isn't a trademarked title. Utilities use a plain name that says what they do ("Calculator", "QR Code"). |
-| `kind` | `"game"` or `"utility"`. Utilities need `sdkVersion` 2. |
+| `kind` | `"game"` or `"utility"`. Utilities need `sdkVersion` 2 or newer. |
 | `version` | `major.minor.patch`. Raise it with every change, or the update won't be published. |
 | `sdkVersion` | The SDK version the pack needs. An app with an older SDK shows the pack as "Update Zephydian to install this". |
 | `description` | One line for the Library. |
@@ -88,6 +89,7 @@ Only these files are allowed: `manifest.json`, `main.js`, `icon.png`, and PNG, J
 | `whatsNew` | A short line shown in the Library after an update. |
 | `symbol` | Optional. An SF Symbol name (for example `"doc.on.clipboard"`) used as the icon instead of `icon.png`. Meant for utilities. |
 | `capabilities` | Optional (SDK 2). What the pack uses beyond its own screen and storage, such as `["clipboard.write"]`. See [Capabilities](#capabilities). |
+| `handles` | Optional (SDK 3, utilities). `["image"]` makes the utility the editor behind a screenshot's Edit button. It needs the `windows` and `images.edit` capabilities. |
 
 ## The game object
 
@@ -183,13 +185,18 @@ Each pack has its own storage, up to 1 MB in total. It's kept when the player re
 g.clear("fill");                                          // fill the whole area (default "background")
 g.rect(x, y, w, h, { fill, stroke, lineWidth, radius }); // rounded when radius > 0
 g.circle(cx, cy, r, { fill, stroke, lineWidth });
+g.ellipse(x, y, w, h, { fill, stroke, lineWidth });       // SDK 3
 g.line(x1, y1, x2, y2, { stroke, lineWidth, cap });      // cap: "butt" | "round"
-g.path([[x, y], [x, y], …], { fill, stroke, lineWidth, closed });
+g.path([[x, y], [x, y], …], { fill, stroke, lineWidth, closed, cap }); // cap: "round" also rounds the joins (SDK 3)
 g.text("2048", x, y, { size, weight, color, align, font }); // align: "left" | "center" | "right"
                                                           // weight: "regular" | "medium" | "semibold" | "bold"
                                                           // font: "system" | "rounded" | "mono"
-g.image("ship.png", x, y, w, h, { opacity });
+g.image("ship.png", x, y, w, h, { opacity, pixelate });  // pixelate: block size, to hide what's there (SDK 3)
 g.save(); g.translate(dx, dy); g.rotate(radians); g.scale(s); g.alpha(a); g.restore();
+g.clip(x, y, w, h, { radius });                          // only draw inside this area until restore() (SDK 3)
+g.shadow(color, { radius, x, y });                       // a soft shadow under what follows, until restore() (SDK 3)
+g.symbol("star.fill", cx, cy, size, { color });          // an SF Symbol centered on the point (SDK 3)
+g.gradient(x, y, w, h, [color1, color2], { radius });    // a gradient from top-left to bottom-right (SDK 3)
 ```
 
 `text` is positioned by the middle of its line, so `y` is the vertical center of the text. A rect, circle or path with neither `fill` nor `stroke` is filled with `"text"`. The game area has rounded corners, and nothing is drawn outside it.
@@ -299,9 +306,72 @@ A capability is something a pack may do beyond its own screen and storage. Each 
 
 A **drawing** for images is `{ width, height, scale, draw(g, width, height) }`, using the same drawing API as games. `scale` (1–4, default 2) is pixels per point. Theme colors aren't meaningful outside the panel, so exported drawings should use fixed colors like `"#000000"`.
 
-| `screen.capture` | Take pictures of your screen (macOS asks you first) and save them in Pictures/Screenshots or a folder you choose | `z.screen.capture(mode, done)` with `"area"`, `"window"` or `"screen"`: Zephydian hides the panel, shows its own selection (Esc cancels), waits the delay, captures (leaving its own windows out) and shows a preview card with Copy, Save, Edit and Close; left alone, the shot is copied. `done({ id })` or `done({ error })`. `z.screen.permission()`, `requestPermission()`, `prefs()` / `setPrefs({ delay, pointer, sound, format, autoCopy })` (delay 0, 3, 5 or 10; format `"png"` or `"jpeg"`; `autoCopy` copies every shot as soon as it's taken), `folder()` → `{ label, custom }`, `chooseFolder(done)`, `resetFolder()`, `openFolder()`, `shots()` → this session's `[{ id, width, height, at, saved, image }]`, `copy(id)`, `save(id)` → file name, `saveAs(id, done)`, `delete(id)` (a saved file goes to the Trash), `canEdit()` and `edit(id)` (opens an installed image editor). A pack with `shortcut` and `screen.capture` takes an Area screenshot when its shortcut is pressed. |
+| `windows` | Open its own window (Zephydian shows in the Dock while it's open) | See [Windows and image editing](#windows-and-image-editing-sdk-3). SDK 3. |
+| `images.edit` | Open your screenshots, an image you pick or one you paste, and save the edited copy where you choose | `z.images`, see [Windows and image editing](#windows-and-image-editing-sdk-3). SDK 3. |
+| `screen.capture` | Take pictures of your screen (macOS asks you first) and save them in Pictures/Screenshots or a folder you choose | `z.screen.capture(mode, done)` with `"area"`, `"window"` or `"screen"`: Zephydian hides the panel, shows its own selection (Esc cancels), waits the delay, captures (leaving its own windows out) and shows a preview card with Copy, Save, Edit and Close; left alone, the shot is copied. `done({ id })` or `done({ error })`. `z.screen.permission()`, `requestPermission()`, `prefs()` / `setPrefs({ delay, pointer, sound, format, autoCopy })` (delay 0, 3, 5 or 10; format `"png"` or `"jpeg"`; `autoCopy` copies every shot as soon as it's taken), `folder()` → `{ label, custom }`, `chooseFolder(done)`, `resetFolder()`, `openFolder()`, `shots()` → this session's `[{ id, width, height, at, saved, image }]`, `copy(id)`, `save(id)` → file name, `saveAs(id, done)`, `delete(id)` (a saved file goes to the Trash), `canEdit()` and `edit(id)` (opens the installed image editor, such as Markup, in its own window). A pack with `shortcut` and `screen.capture` takes an Area screenshot when its shortcut is pressed. |
 
-`windows` is reserved for the image editor (it gets its API with it).
+`windows` and `images.edit` (SDK 3) are described in the next section.
+
+## Windows and image editing (SDK 3)
+
+A utility with the `windows` capability can open **its own window**: a normal, resizable Mac window, outside the panel. While any such window is open, Zephydian shows in the Dock and in ⌘-Tab, and it goes back to being a menu bar app when the last one closes.
+
+Each window runs a **separate copy** of your `main.js`. Instead of the utility object, that copy uses the object you put under `window`:
+
+```js
+zephydian.utility({
+  view() { … },                       // the panel, as before
+  window: {
+    start(input) { },                 // once, with what z.window.open() was given
+    view() { },                       // required: the window's screen, from z.ui controls
+    key(e) { },                       // keys, including Esc and ⌘ combinations (e.command)
+    undo() { }, redo() { },           // ⌘Z and ⇧⌘Z; return true if something changed
+    shouldClose() { },                // return false to keep the window open (ask first, then z.window.close())
+  },
+});
+```
+
+- `z.window.open(input)` (from the panel): opens a new window. `input` is a small JSON object, such as `{ image: id }`. The panel hides.
+- In the window: `z.window.isWindow`, `z.window.input`, `z.window.title(text)`, `z.window.edited(on)` (the dot in the close button), `z.window.close()` and `z.window.confirm({ title, message, button, destructive }, done)`, a standard alert with your button and Cancel, where `done(ok)` gets `true` for your button.
+- Keys: letters, digits, arrows, Enter, Backspace and Esc go to `key(e)`, and so do ⌘ combinations with `e.command` true. The exceptions are ⌘W (close), ⌘Q, ⌘H, ⌘M and ⌘, (the app's own), and ⌘Z/⇧⌘Z (`undo()`/`redo()`). While a text field has the cursor, it gets its keys as usual.
+- Closing the window stops that copy of the pack completely.
+
+### Controls for windows
+
+- `z.ui.toolbar(children, { vertical })`: a floating bar of controls on Liquid Glass (a frosted bar in Frosted mode). `vertical: true` makes a tool rail. Buttons inside it can take `selected: true` (the current tool), `badge: "A"` (its key, in the corner), `bar: 3.4` (a line-weight glyph of that thickness instead of a symbol) and `style: "prominent"` (the main action).
+- `z.ui.menu(label, items, selected, onSelect(index), { symbol, onPress })`: a button with a menu of choices, ticked at `selected`. With `onPress`, clicking the button does that and its arrow opens the menu (Save, with Save As… in the menu).
+- `z.ui.logo({ size })`: Zephydian's jet logo, `size` points tall (12–96), in the text color.
+- `z.ui.band(left, center, right)`: a row whose middle is centered on the whole row, whatever the sides hold. Any slot can be `null`.
+- `z.ui.row(children, { fill: true })`: a row that takes all the height it's given, aligned to the top (a tool rail next to a fit canvas).
+- `z.ui.swatch(color, { shape: "circle" })`: a color dot, ringed when `selected`.
+- `z.window.appearance("dark")` keeps the window dark in light mode too (a photo editor's artboard); `"auto"` follows the app.
+- `z.window.choose({ title, message, buttons: [{ label, destructive }] }, done)`: an alert with up to three buttons and Cancel. `done(index)` gets the button's index, or `-1` for Cancel.
+- `z.ui.canvas({ fit: { width, height }, draw(g), … })`: with `fit`, the canvas takes all the space left in the window and draws in its own units (for an image, its pixels). It's scaled to fit, never enlarged past one point per unit, and centered. Its extra options:
+  - `onPointer(e)` gets `{ type: "down" | "move" | "up", x, y, shift, option, command, clicks, scale }` in canvas units while the button is held. `scale` is screen points per canvas unit, so handles can be grabbed at the same size on screen at any zoom.
+  - `onHover(e)` (the same object, `type: "hover"`) comes as the pointer moves with no button held. Use it only while it matters, such as for changing `cursor` over handles, because every move calls into the pack.
+  - `onLayout({ scale })` comes whenever the canvas's scale changes, so you can draw handles and lines at a fixed size on screen.
+  - `ink: { color, width, opacity }` draws a freehand line natively while the pointer is down (so it keeps up with the hand), then calls `onStroke({ points: [[x, y], …], shift })` with the line already simplified.
+  - `textEdit: { id, x, y, text, size, color }` puts a text field on the canvas at `x, y` (the middle of the line). It calls `onTextChange(text)` as you type and `onTextEnd(text)` when you press Enter or Esc, or click elsewhere.
+  - `cursor`: `"crosshair"`, `"text"`, `"move"`, `"pointer"`, `"resize-nwse"`, `"resize-nesw"`, `"resize-ns"`, `"resize-ew"`, or the arrow if you leave it out.
+
+### Images (`images.edit`)
+
+The picture's pixels never reach JavaScript. A pack gets an **id** (`"image:…"`), draws it with `g.image(id, …)`, and hands a **drawing** back to Zephydian, which turns it into the finished image, one pixel per unit (`scale: 1`).
+
+| Call | What it does |
+| --- | --- |
+| `z.images.screenshots()` | This session's screenshots: `[{ id, width, height, at, saved, image }]`. `image` is a thumbnail for a list row. |
+| `z.images.fromScreenshot(id)` | A copy of a screenshot to edit → `{ id, name, width, height, source, saved }`, or `null`. |
+| `z.images.open(done)` | The open dialog for one image file. `done(info)` gets the same object, or `null`. |
+| `z.images.paste()` | The image on the clipboard (read when the person clicks), or `null`. |
+| `z.images.info(id)` | The object above. `source` is `"screenshot"`, `"file"` or `"clipboard"`, and `saved` is the file's name or `null`. |
+| `z.images.copy(drawing)` | Copies the finished image (also needs `clipboard.write`). |
+| `z.images.save(id, drawing)` | Saves over where the image came from. For a screenshot, that's its file, or a new file in Screenshot's folder. For an opened file, it's that file (PNG, JPEG or TIFF). Returns the file's name, or `null` (a pasted image has nowhere to go: use `saveAs`). |
+| `z.images.saveAs(id, drawing, done)` | The save dialog (also needs `files.save`). |
+| `z.images.update(id, drawing)` | Gives a screenshot its edited picture without saving, so Screenshot's list and Copy use the edit. |
+| `z.images.discard(id)` | Deletes a screenshot, and moves its saved file to the Trash. Opened files are never deleted. |
+
+A utility with `"handles": ["image"]` in its manifest is the one a screenshot's Edit button opens: its window starts with `{ image: id }`.
 
 ## A complete example
 

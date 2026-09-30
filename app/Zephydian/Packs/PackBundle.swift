@@ -17,12 +17,14 @@ nonisolated struct PackManifest: Codable, Equatable {
     var symbol: String?
     /// What the pack may use beyond drawing and storage (see `PackCapability`).
     var capabilities: [String]?
+    /// What the utility opens for others (SDK 3). "image": it's the editor behind a screenshot's Edit.
+    var handles: [String]?
 }
 
 /// A pack on disk, ready to run: its folder, manifest and script.
 struct PackBundle {
     /// The newest SDK version this app can run.
-    static let sdkVersion = 2
+    static let sdkVersion = 3
     /// Utilities arrived in SDK 2.
     static let utilitySDK = 2
 
@@ -66,6 +68,12 @@ struct PackBundle {
             throw LoadError.unreadable("main.js can't be read")
         }
         return PackBundle(folder: folder, manifest: manifest, script: script, isDev: isDev)
+    }
+
+    /// An image editor: a utility that handles "image" and may open windows and edit images.
+    var isImageEditor: Bool {
+        kind == .utility && manifest.handles?.contains("image") == true
+            && Set(manifest.capabilities ?? []).isSuperset(of: ["windows", "images.edit"])
     }
 
     /// A file under the pack's assets/ folder, or nil if the name tries to leave it.

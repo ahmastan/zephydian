@@ -35,9 +35,12 @@ final class ScreenCapture {
 
     struct Shot {
         let id: String
-        let image: CGImage
+        /// Replaced by an edited copy when an image editor hands one back.
+        var image: CGImage
         let date: Date
         var savedURL: URL?
+        /// The screenshot utility that took it (its folder and format are used to save it).
+        var packID: String?
     }
 
     private unowned let services: PackServices
@@ -156,7 +159,7 @@ final class ScreenCapture {
             switch result {
             case .success(let image):
                 if prefs.sound { Self.shutter() }
-                let shot = Shot(id: String(UUID().uuidString.prefix(8)).lowercased(), image: image, date: Date())
+                let shot = Shot(id: String(UUID().uuidString.prefix(8)).lowercased(), image: image, date: Date(), packID: packID)
                 self.shots.insert(shot, at: 0)
                 if self.shots.count > 20 { self.forget(self.shots.removeLast().id) }
                 self.services.changed()
@@ -283,15 +286,22 @@ final class ScreenCapture {
 
     func shot(_ id: String) -> Shot? { shots.first { $0.id == id } }
 
-    /// Adds an image to this session's shots without capturing (an edited copy coming back from the
-    /// editor, and tests). Returns its id.
+    /// Adds an image to this session's shots without capturing (tests). Returns its id.
     @discardableResult
-    func keep(_ image: CGImage) -> String {
-        let shot = Shot(id: String(UUID().uuidString.prefix(8)).lowercased(), image: image, date: Date())
+    func keep(_ image: CGImage, packID: String? = nil) -> String {
+        let shot = Shot(id: String(UUID().uuidString.prefix(8)).lowercased(), image: image, date: Date(), packID: packID)
         shots.insert(shot, at: 0)
         if shots.count > 20 { forget(shots.removeLast().id) }
         services.changed()
         return shot.id
+    }
+
+    /// An image editor hands back the edited picture: copying, saving and the list use it from now on.
+    func replace(_ id: String, with image: CGImage) {
+        guard let i = shots.firstIndex(where: { $0.id == id }) else { return }
+        shots[i].image = image
+        thumbnails[id] = nil
+        services.changed()
     }
 
     func thumbnail(_ id: String) -> NSImage? {
@@ -315,14 +325,23 @@ final class ScreenCapture {
         return true
     }
 
-    /// Saves into the folder, as "Screenshot 2026-09-29 at 14.05.12.png". Returns the file's name.
+    /// Saves into the folder, as "Screenshot 2026-09-29 at 14.05.12.png", and returns the file's name.
+    /// A shot that was saved before (and edited since) replaces its file instead.
     func save(_ id: String, packID: String) -> String? {
         guard let i = shots.firstIndex(where: { $0.id == id }) else { return nil }
-        let format = prefs(packID).format
-        guard let data = data(id, format: format) else { return nil }
         let (folder, custom) = folder(packID)
         let scoped = custom && folder.startAccessingSecurityScopedResource()
         defer { if scoped { folder.stopAccessingSecurityScopedResource() } }
+        if let existing = shots[i].savedURL, FileManager.default.fileExists(atPath: existing.path) {
+            let format = ["jpg", "jpeg"].contains(existing.pathExtension.lowercased()) ? "jpeg" : "png"
+            let scopedFile = !scoped && existing.startAccessingSecurityScopedResource()
+            defer { if scopedFile { existing.stopAccessingSecurityScopedResource() } }
+            guard let data = data(id, format: format), (try? data.write(to: existing, options: .atomic)) != nil else { return nil }
+            services.changed()
+            return existing.lastPathComponent
+        }
+        let format = prefs(packID).format
+        guard let data = data(id, format: format) else { return nil }
         let stamp = shots[i].date.formatted(.iso8601.year().month().day().dateSeparator(.dash)) + " at "
             + shots[i].date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits)).replacingOccurrences(of: ":", with: ".")
         var url = folder.appending(path: "Screenshot \(stamp).\(format == "jpeg" ? "jpg" : "png")")
@@ -387,9 +406,8 @@ final class ScreenCapture {
     func removeData(packID: String) {
         services.defaults.removeObject(forKey: "pack.\(packID).screenshot.prefs")
         services.defaults.removeObject(forKey: "pack.\(packID).screenshot.folder")
-        preview?.close()
-        shots.removeAll()
-        thumbnails.removeAll()
+        // Only the shots this utility took (removing any other utility leaves them alone).
+        for shot in shots where shot.packID == packID { forget(shot.id) }
     }
 
     // MARK: Helpers
@@ -522,7 +540,7 @@ private final class SelectionView: NSView {
         self.accent = accent
         self.cursor = cursor
         super.init(frame: frame)
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeAlways, .inVisibleRect, .cursorUpdate], owner: self))
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect, .cursorUpdate], owner: self))
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -537,6 +555,9 @@ private final class SelectionView: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
+        // Set on every move: until Zephydian is the active app, macOS doesn't apply cursor rects,
+        // so the plus sign would otherwise only show once the button is pressed.
+        cursor.set()
         guard mode == .window else { return }
         let global = NSEvent.mouseLocation
         let hit = targets.first { $0.1.contains(global) }       // front-most first (ScreenCaptureKit's order)
@@ -544,7 +565,10 @@ private final class SelectionView: NSView {
         cursor.set()
     }
 
+    override func mouseEntered(with event: NSEvent) { cursor.set() }
+
     override func mouseDown(with event: NSEvent) {
+        cursor.set()
         if mode == .window {
             let global = NSEvent.mouseLocation
             onDone(.init(windowID: targets.first { $0.1.contains(global) }?.0))
@@ -568,33 +592,59 @@ private final class SelectionView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.black.withAlphaComponent(0.28).setFill()
-        bounds.fill()
-        if mode == .area, let rect = selection {
-            NSColor.clear.setFill()
-            rect.fill(using: .copy)
-            accent.setStroke()
-            let border = NSBezierPath(rect: rect.insetBy(dx: -0.5, dy: -0.5))
-            border.lineWidth = 1
-            border.stroke()
-            let text = "\(Int(rect.width)) × \(Int(rect.height))" as NSString
-            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
-                                                              .foregroundColor: NSColor.white]
-            let size = text.size(withAttributes: attributes)
-            let label = NSRect(x: rect.maxX - size.width - 10, y: rect.minY - size.height - 10, width: size.width + 10, height: size.height + 6)
-            NSColor.black.withAlphaComponent(0.6).setFill()
-            NSBezierPath(roundedRect: label, xRadius: 5, yRadius: 5).fill()
-            text.draw(at: NSPoint(x: label.minX + 5, y: label.minY + 3), withAttributes: attributes)
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        // The screen is dimmed except for the selection (or the window under the pointer), which
+        // is cut out with rounded corners.
+        context.setFillColor(NSColor.black.withAlphaComponent(0.32).cgColor)
+        if mode == .area, let rect = selection, rect.width > 0, rect.height > 0 {
+            context.addRect(bounds)
+            context.addPath(CGPath(roundedRect: rect, cornerWidth: 8, cornerHeight: 8, transform: nil))
+            context.fillPath(using: .evenOdd)
+            drawSelection(context, rect)
         } else if mode == .window, let hovered {
             let rect = hovered.1.offsetBy(dx: -screenOrigin.x, dy: -screenOrigin.y)
-            NSColor.clear.setFill()
-            rect.fill(using: .copy)
-            accent.withAlphaComponent(0.25).setFill()
-            rect.fill()
-            accent.setStroke()
-            let border = NSBezierPath(rect: rect.insetBy(dx: 1, dy: 1))
-            border.lineWidth = 2
-            border.stroke()
+            context.addRect(bounds)
+            context.addRect(rect)
+            context.fillPath(using: .evenOdd)
+            let path = CGPath(roundedRect: rect.insetBy(dx: 1.25, dy: 1.25), cornerWidth: 9, cornerHeight: 9, transform: nil)
+            context.addPath(path)
+            context.setFillColor(accent.withAlphaComponent(0.14).cgColor)
+            context.fillPath()
+            context.addPath(path)
+            context.setStrokeColor(accent.withAlphaComponent(0.95).cgColor)
+            context.setLineWidth(2.5)
+            context.strokePath()
+        } else {
+            context.fill(bounds)
         }
+    }
+
+    /// A glowing border in the accent color with a thin white line inside it, and the size in
+    /// pixels on a dark badge centered under the selection.
+    private func drawSelection(_ context: CGContext, _ rect: NSRect) {
+        context.saveGState()
+        context.setShadow(offset: .zero, blur: 9, color: accent.withAlphaComponent(0.55).cgColor)
+        context.addPath(CGPath(roundedRect: rect.insetBy(dx: -1.5, dy: -1.5), cornerWidth: 9, cornerHeight: 9, transform: nil))
+        context.setStrokeColor(accent.withAlphaComponent(0.98).cgColor)
+        context.setLineWidth(3)
+        context.strokePath()
+        context.restoreGState()
+        context.addPath(CGPath(roundedRect: rect.insetBy(dx: -0.5, dy: -0.5), cornerWidth: 8, cornerHeight: 8, transform: nil))
+        context.setStrokeColor(NSColor.white.withAlphaComponent(0.95).cgColor)
+        context.setLineWidth(1)
+        context.strokePath()
+
+        let scale = window?.backingScaleFactor ?? 2
+        let text = "\(Int((rect.width * scale).rounded())) × \(Int((rect.height * scale).rounded()))" as NSString
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold),
+                                                          .foregroundColor: NSColor.white]
+        let size = text.size(withAttributes: attributes)
+        var badge = NSRect(x: rect.midX - size.width / 2 - 7, y: rect.minY - 10 - size.height - 6, width: size.width + 14, height: size.height + 6)
+        // Kept on screen: above the selection's bottom edge when there's no room under it.
+        badge.origin.x = max(6, min(badge.origin.x, bounds.maxX - badge.width - 6))
+        if badge.minY < 6 { badge.origin.y = rect.minY + 10 }
+        NSColor(white: 0, alpha: 0.72).setFill()
+        NSBezierPath(roundedRect: badge, xRadius: 5, yRadius: 5).fill()
+        text.draw(at: NSPoint(x: badge.minX + 7, y: badge.minY + 3), withAttributes: attributes)
     }
 }
