@@ -1,0 +1,12 @@
+{
+  "id": "markup",
+  "name": "Markup",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 3,
+  "description": "Crop, draw on, pixelate and label screenshots or any image, in its own window.",
+  "symbol": "pencil.tip.crop.circle",
+  "capabilities": ["windows", "images.edit", "clipboard.write", "files.save"],
+  "handles": ["image"],
+  "whatsNew": "First release."
+}

@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import JavaScriptCore
@@ -41,6 +42,8 @@ nonisolated enum PackShape: Equatable {
         var fill: PackColor?
         var stroke: PackColor?
         var lineWidth: Double = 1
+        /// Round caps and joins on the stroke (freehand lines, arrows).
+        var round = false
     }
     enum Weight: String { case regular, medium, semibold, bold }
     enum Align: String { case left, center, right }
@@ -50,9 +53,19 @@ nonisolated enum PackShape: Equatable {
     case rect(CGRect, radius: Double, Style)
     case circle(CGPoint, radius: Double, Style)
     case line(CGPoint, CGPoint, color: PackColor, width: Double, round: Bool)
+    case ellipse(CGRect, Style)
     case path([CGPoint], closed: Bool, Style)
     case text(String, CGPoint, size: Double, weight: Weight, color: PackColor, align: Align, font: Font)
-    case image(String, CGRect, opacity: Double)
+    /// `pixelate` > 0 draws the image in blocks that many image pixels wide (to hide what's there).
+    case image(String, CGRect, opacity: Double, pixelate: Double)
+    /// Limits what follows (until `restore`) to a rectangle.
+    case clip(CGRect, radius: Double)
+    /// A soft shadow under what follows (until `restore`).
+    case shadow(PackColor, radius: Double, dx: Double, dy: Double)
+    /// An SF Symbol, centered on the point, `size` tall.
+    case symbol(String, CGPoint, size: Double, color: PackColor)
+    /// A rectangle filled with a gradient from its top-left to its bottom-right.
+    case gradient(CGRect, radius: Double, [PackColor])
     case save, restore
     case translate(Double, Double), rotate(Double), scale(Double), alpha(Double)
 }
@@ -76,6 +89,8 @@ nonisolated struct PackKey {
     var shift = false
     var option = false
     var isRepeat = false
+    /// ⌘ was held. Only a pack's own window gets ⌘ keys (⌘C, ⌘S…); the panel keeps them.
+    var command = false
 }
 
 /// What the runtime tells the game screen.
@@ -91,6 +106,19 @@ protocol PackHost: AnyObject {
     func packFailed(_ message: String)
 }
 
+/// What a pack's own window does for the runtime (the `windows` capability, SDK 3).
+protocol PackWindowHost: AnyObject {
+    func packWindowTitle(_ title: String)
+    func packWindowEdited(_ edited: Bool)
+    func packWindowClose()
+    /// A standard alert on the window. `done` gets true for the confirm button.
+    func packWindowConfirm(title: String, message: String?, button: String, destructive: Bool, done: @escaping (Bool) -> Void)
+    /// An alert with several buttons and Cancel. `done` gets the button's index, or -1 for Cancel.
+    func packWindowChoose(title: String, message: String?, buttons: [(label: String, destructive: Bool)], done: @escaping (Int) -> Void)
+    /// "dark" keeps the window dark whatever the app's appearance; "auto" follows it.
+    func packWindowAppearance(_ mode: String)
+}
+
 // MARK: - Runtime
 
 /// Runs one pack's main.js in its own JavaScriptCore context and exposes the SDK (`z`, `zephydian`).
@@ -103,6 +131,14 @@ final class PackRuntime {
 
     let bundle: PackBundle
     weak var host: PackHost?
+    weak var windowHost: PackWindowHost?
+
+    /// Where the pack runs: the panel, or its own window (SDK 3), which starts with `input`.
+    enum Mode: Equatable {
+        case panel
+        case window(input: String)
+    }
+    let mode: Mode
 
     private let context: JSContext
     private var sdk: JSValue!            // the prelude's private entry points
@@ -131,10 +167,11 @@ final class PackRuntime {
     static func tileKey(_ id: String) -> String { "pack.\(id).tile" }
 
     /// Runs main.js right away. `host` is set first, so calls made while the script loads aren't lost.
-    init(bundle: PackBundle, host: PackHost?, storage: PackStorage? = nil, defaults: UserDefaults = .standard,
+    init(bundle: PackBundle, host: PackHost?, mode: Mode = .panel, storage: PackStorage? = nil, defaults: UserDefaults = .standard,
          services: PackServices = .shared) {
         self.bundle = bundle
         self.host = host
+        self.mode = mode
         self.storage = storage ?? PackStorage(packID: bundle.id)
         self.defaults = defaults
         self.services = services
@@ -150,7 +187,8 @@ final class PackRuntime {
         guard failure == nil else { return }
         context.evaluateScript(bundle.script, withSourceURL: URL(string: "main.js"))
         if failure == nil, sdk.invokeMethod("hasApp", withArguments: []).toBool() == false {
-            fail(isUtility ? "main.js never called zephydian.utility({ … })" : "main.js never called zephydian.game({ … })")
+            fail(mode != .panel ? "main.js has no window: { view() } in zephydian.utility({ … })"
+                 : isUtility ? "main.js never called zephydian.utility({ … })" : "main.js never called zephydian.game({ … })")
         }
     }
 
@@ -187,6 +225,9 @@ final class PackRuntime {
     func keyUp(_ e: PackKey) -> Bool { call("keyUp", Self.keyObject(e))?.toBool() ?? false }
     func click(x: Double, y: Double, right: Bool) { call("click", ["x": x, "y": y, "button": right ? "right" : "left"]) }
     func undo() -> Bool { call("undo")?.toBool() ?? false }
+    func redo() -> Bool { call("redo")?.toBool() ?? false }
+    /// A window's close button or ⌘W. False keeps it open (the pack may ask first, then close it).
+    func shouldClose() -> Bool { call("shouldClose")?.toBool() ?? true }
     func pressOverlayButton(_ index: Int) { call("overlayPress", index) }
     func selectMenuItem(_ index: Int) { call("menuSelect", index) }
 
@@ -609,6 +650,45 @@ final class PackRuntime {
                 return "null"
             }
         } as @convention(block) (String, String, Int) -> String)
+        // Its own window (windows, SDK 3).
+        define("window", { [weak self] (action: String, arg: String, callback: Int) in
+            MainActor.assumeIsolated {
+                guard let self, allowed("windows") else { return }
+                switch action {
+                case "open":
+                    // From the panel: a new window running this pack, started with `arg` (JSON).
+                    guard case .panel = self.mode, let input = Self.jsonObject(arg) else { return }
+                    if let image = input["image"] as? String, self.services.images.entry(image)?.packID != id { return }
+                    self.services.windows.open(self.bundle, input: Self.jsonString(input))
+                case "title": self.windowHost?.packWindowTitle(String(arg.prefix(120)))
+                case "edited": self.windowHost?.packWindowEdited(arg == "true")
+                case "close": self.windowHost?.packWindowClose()
+                case "appearance": self.windowHost?.packWindowAppearance(arg)
+                case "choose":
+                    guard let o = Self.jsonObject(arg), let host = self.windowHost else { return self.respond(callback, -1) }
+                    let buttons = (o["buttons"] as? [[String: Any]] ?? []).prefix(3).map {
+                        (label: String(($0["label"] as? String ?? "OK").prefix(40)), destructive: $0["destructive"] as? Bool ?? false)
+                    }
+                    host.packWindowChoose(title: String((o["title"] as? String ?? "").prefix(200)),
+                                          message: (o["message"] as? String).map { String($0.prefix(500)) },
+                                          buttons: Array(buttons)) { [weak self] i in self?.respond(callback, i) }
+                case "confirm":
+                    guard let o = Self.jsonObject(arg), let host = self.windowHost else { return self.respond(callback, false) }
+                    host.packWindowConfirm(title: String((o["title"] as? String ?? "").prefix(200)),
+                                           message: (o["message"] as? String).map { String($0.prefix(500)) },
+                                           button: String((o["button"] as? String ?? "OK").prefix(40)),
+                                           destructive: o["destructive"] as? Bool ?? false) { [weak self] ok in self?.respond(callback, ok) }
+                default: break
+                }
+            }
+        } as @convention(block) (String, String, Int) -> Void)
+        // Images an editor works on (images.edit, SDK 3).
+        define("images", { [weak self] (action: String, arg: String, drawing: String, callback: Int) -> String in
+            MainActor.assumeIsolated {
+                guard let self, allowed("images.edit") else { return "null" }
+                return self.imagesCall(action, arg, drawing, callback)
+            }
+        } as @convention(block) (String, String, String, Int) -> String)
         define("log", { [weak self] (s: String) in
             #if DEBUG
             MainActor.assumeIsolated { print("[\(self?.bundle.id ?? "pack")] \(s)") }
@@ -616,7 +696,9 @@ final class PackRuntime {
         } as @convention(block) (String) -> Void)
 
         let setup = context.evaluateScript(Self.prelude, withSourceURL: URL(string: "zephydian-sdk.js"))
-        guard let result = setup?.call(withArguments: [native, bundle.manifest.kind, Array(capabilities).sorted()]), failure == nil else { return }
+        let input: String? = if case .window(let input) = mode { input } else { nil }
+        guard let result = setup?.call(withArguments: [native, bundle.manifest.kind, Array(capabilities).sorted(), input ?? NSNull()]),
+              failure == nil else { return }
         sdk = result.objectForKeyedSubscript("sdk")
         // `z` and `zephydian` can't be replaced by the pack.
         for name in ["z", "zephydian"] {
@@ -628,9 +710,87 @@ final class PackRuntime {
         }
     }
 
+    /// `z.images`: the pictures an image editor works on. Everything here needs `images.edit`;
+    /// copying also needs `clipboard.write`, and Save as… `files.save`.
+    private func imagesCall(_ action: String, _ arg: String, _ drawing: String, _ callback: Int) -> String {
+        let images = services.images, capture = services.capture, id = bundle.id
+        func info(_ imageID: String?) -> String {
+            imageID.flatMap { images.entry($0) }.map { Self.jsonString(images.info($0)) } ?? "null"
+        }
+        /// The image this pack may use, by its "image:<id>".
+        func own(_ imageID: String) -> PackImages.Entry? {
+            images.entry(imageID).flatMap { $0.packID == id ? $0 : nil }
+        }
+        func render() -> CGImage? {
+            PackImages.render(drawingJSON: drawing) { [weak self] name in self?.picture(name) }
+        }
+        switch action {
+        case "screenshots":
+            return Self.jsonString(capture.shots.map { shot in
+                ["id": shot.id, "width": shot.image.width, "height": shot.image.height, "at": shot.date.timeIntervalSince1970 * 1000,
+                 "saved": shot.savedURL?.lastPathComponent ?? NSNull(), "image": "screenshot:\(shot.id)"] as [String: Any]
+            })
+        case "fromScreenshot": return info(images.fromScreenshot(arg, packID: id))
+        case "open": images.open(packID: id) { [weak self] new in self?.respond(callback, new.flatMap { images.entry($0) }.map(images.info) ?? NSNull()) }
+        case "paste": return info(images.paste(packID: id))
+        case "info": return own(arg).map { Self.jsonString(images.info($0)) } ?? "null"
+        case "copy":
+            guard capabilities.contains("clipboard.write"), let image = render(),
+                  let png = PackImages.encode(image, format: "png") else { return "false" }
+            PackNative.copyImage(png)
+            return "true"
+        case "update":
+            // Hands the edited picture back to where it came from (a screenshot's list entry).
+            guard let entry = own(arg), case .screenshot(let shot) = entry.source, let image = render() else { return "false" }
+            capture.replace(shot, with: image)
+            return "true"
+        case "save":
+            // Saves over where the picture came from: the screenshot's file (or its folder), or the opened file.
+            guard let entry = own(arg), let image = render() else { return "null" }
+            switch entry.source {
+            case .screenshot(let shot):
+                guard let owner = capture.shot(shot) else { return "null" }
+                capture.replace(shot, with: image)
+                let screenshotPack = owner.packID ?? PackLibrary.shared.packs.first { $0.manifest.capabilities?.contains("screen.capture") == true }?.id ?? "screenshot"
+                return capture.save(shot, packID: screenshotPack).map { Self.jsonString([$0]) } ?? "null"
+            case .file(let url):
+                // Not atomic: the sandbox lets the app write the file you picked, not make others next to it.
+                guard let data = PackImages.encode(image, format: url.pathExtension),
+                      ["png", "jpg", "jpeg", "tif", "tiff"].contains(url.pathExtension.lowercased()),
+                      (try? data.write(to: url)) != nil else { return "null" }
+                return Self.jsonString([url.lastPathComponent])
+            case .clipboard:
+                return "null"
+            }
+        case "saveAs":
+            guard capabilities.contains("files.save"), let entry = own(arg), let image = render() else { respond(callback, false); return "null" }
+            var format = "png"
+            switch entry.source {
+            case .screenshot(let shot): format = capture.prefs(capture.shot(shot)?.packID ?? "screenshot").format
+            case .file(let url): format = ["jpg", "jpeg"].contains(url.pathExtension.lowercased()) ? "jpeg" : "png"
+            case .clipboard: break
+            }
+            guard let data = PackImages.encode(image, format: format) else { respond(callback, false); return "null" }
+            PackNative.save(name: "\(entry.name).\(format == "jpeg" ? "jpg" : "png")", data: data) { [weak self] ok in self?.respond(callback, ok) }
+        case "discard":
+            // Delete: a screenshot is forgotten and its saved file goes to the Trash. Opened files are never deleted.
+            guard let entry = own(arg) else { return "false" }
+            if case .screenshot(let shot) = entry.source { capture.delete(shot) }
+            images.forget(arg)
+            return "true"
+        default: break
+        }
+        return "null"
+    }
+
+    /// A picture for `g.image` in an exported drawing (the same ones the pack can show).
+    func picture(_ name: String) -> NSImage? {
+        services.images.picture(name, packID: bundle.id, capabilities: capabilities)
+    }
+
     /// The SDK's JavaScript side. It checks and flattens what packs pass in, so Swift only sees plain values.
     private static let prelude = #"""
-    (function (N, KIND, CAPS) {
+    (function (N, KIND, CAPS, INPUT) {
       "use strict";
       const num = v => (typeof v === "number" && isFinite(v)) ? v : 0;
       const col = v => (typeof v === "string" && v.length < 64) ? v : null;
@@ -641,17 +801,25 @@ final class PackRuntime {
         clear(fill) { this._p(["clear", col(fill) || "background"]); }
         rect(x, y, w, h, o = {}) { this._p(["rect", num(x), num(y), num(w), num(h), col(o.fill), col(o.stroke), num(o.lineWidth) || 1, num(o.radius)]); }
         circle(x, y, r, o = {}) { this._p(["circle", num(x), num(y), num(r), col(o.fill), col(o.stroke), num(o.lineWidth) || 1]); }
+        ellipse(x, y, w, h, o = {}) { this._p(["ellipse", num(x), num(y), num(w), num(h), col(o.fill), col(o.stroke), num(o.lineWidth) || 1]); }
+        clip(x, y, w, h, o = {}) { this._p(["clip", num(x), num(y), num(w), num(h), num(o.radius)]); }
+        shadow(color, o = {}) { this._p(["shadow", col(color) || "#00000059", num(o.radius), num(o.x), num(o.y)]); }
+        symbol(name, x, y, size, o = {}) { this._p(["symbol", String(name).slice(0, 80), num(x), num(y), num(size) || 24, col(o.color) || "text"]); }
+        gradient(x, y, w, h, colors, o = {}) {
+          this._p(["gradient", num(x), num(y), num(w), num(h), num(o.radius), (Array.isArray(colors) ? colors : []).slice(0, 4).map(c => col(c) || "fill")]);
+        }
         line(x1, y1, x2, y2, o = {}) { this._p(["line", num(x1), num(y1), num(x2), num(y2), col(o.stroke) || "text", num(o.lineWidth) || 1, o.cap === "round" ? 1 : 0]); }
         path(points, o = {}) {
           const flat = [];
           for (const p of (Array.isArray(points) ? points : [])) flat.push(num(p && p[0]), num(p && p[1]));
-          this._p(["path", flat, col(o.fill), col(o.stroke), num(o.lineWidth) || 1, o.closed ? 1 : 0]);
+          this._p(["path", flat, col(o.fill), col(o.stroke), num(o.lineWidth) || 1, o.closed ? 1 : 0,
+                   (o.cap === "round" || o.join === "round") ? 1 : 0]);
         }
         text(s, x, y, o = {}) {
           this._p(["text", String(s).slice(0, 500), num(x), num(y), num(o.size) || 13, String(o.weight || "regular"),
                    col(o.color) || "text", String(o.align || "left"), String(o.font || "system")]);
         }
-        image(name, x, y, w, h, o = {}) { this._p(["image", String(name), num(x), num(y), num(w), num(h), o.opacity == null ? 1 : num(o.opacity)]); }
+        image(name, x, y, w, h, o = {}) { this._p(["image", String(name), num(x), num(y), num(w), num(h), o.opacity == null ? 1 : num(o.opacity), num(o.pixelate)]); }
         save() { this._p(["save"]); }
         restore() { this._p(["restore"]); }
         translate(x, y) { this._p(["translate", num(x), num(y)]); }
@@ -708,6 +876,10 @@ final class PackRuntime {
           image: i.image == null ? null : text(i.image),
           actions: list(i.actions || []).map(a => ({ symbol: text(a.symbol), label: text(a.label) })) })) }),
         canvas: (o = {}) => Object.assign({}, o, { t: "canvas" }),
+        toolbar: (children, o = {}) => Object.assign({}, o, { t: "toolbar", children: list(children) }),
+        logo: (o = {}) => Object.assign({}, o, { t: "logo" }),
+        band: (left, center, right, o = {}) => Object.assign({}, o, { t: "band", children: [left, center, right].map(c => c || { t: "spacer" }) }),
+        menu: (label, items, selected, onSelect, o = {}) => Object.assign({}, o, { t: "menu", label: text(label), items: list(items).map(text), selected, onSelect }),
         swatch: (color, o = {}) => Object.assign({}, o, { t: "swatch", color: text(color) }),
         shortcut: (label, o = {}) => { need("shortcut"); return Object.assign({}, o, { t: "shortcut", label: text(label) }); },
         disclosure: (label, expanded, onToggle, children, o = {}) => Object.assign({}, o, {
@@ -729,7 +901,8 @@ final class PackRuntime {
         handlers.set(k, n);
         if (n.t === "canvas") {
           const g = new Draw();
-          if (typeof n.draw === "function") n.draw(g, num(n.width) || z.width, num(n.height) || 100);
+          const fit = n.fit && typeof n.fit === "object" ? n.fit : null;
+          if (typeof n.draw === "function") n.draw(g, fit ? num(fit.width) : (num(n.width) || z.width), fit ? num(fit.height) : (num(n.height) || 100));
           out.shapes = g._c;
         }
         if (Array.isArray(n.children)) out.children = n.children.map((c, i) => walk(c, k + "." + i, depth + 1));
@@ -866,6 +1039,43 @@ final class PackRuntime {
         system: Object.freeze({
           stats() { need("system.stats"); return JSON.parse(N.systemStats()); },
         }),
+        window: Object.freeze({
+          isWindow: INPUT != null,
+          input: INPUT == null ? null : Object.freeze(JSON.parse(INPUT)),
+          open(input) { need("windows"); N.window("open", JSON.stringify(input || {}), 0); },
+          title(t) { need("windows"); N.window("title", text(t), 0); },
+          edited(on) { need("windows"); N.window("edited", on ? "true" : "false", 0); },
+          close() { need("windows"); N.window("close", "", 0); },
+          appearance(mode) { need("windows"); N.window("appearance", mode === "dark" ? "dark" : "auto", 0); },
+          choose(o, done) {
+            need("windows");
+            N.window("choose", JSON.stringify({ title: text(o && o.title), message: o && o.message != null ? text(o.message) : null,
+                                                buttons: list((o && o.buttons) || []).map(b => ({ label: text(b.label), destructive: !!b.destructive })) }), later(done));
+          },
+          confirm(o, done) {
+            need("windows");
+            N.window("confirm", JSON.stringify({ title: text(o && o.title), message: o && o.message != null ? text(o.message) : null,
+                                                 button: text((o && o.button) || "OK"), destructive: !!(o && o.destructive) }), later(done));
+          },
+        }),
+        images: (() => {
+          const I = (action, arg, d, done) => {
+            need("images.edit");
+            return JSON.parse(N.images(action, arg == null ? "" : String(arg), d ? drawing(Object.assign({ scale: 1 }, d)) : "", later(done)));
+          };
+          return Object.freeze({
+            screenshots() { return I("screenshots"); },
+            fromScreenshot(id) { return I("fromScreenshot", text(id)); },
+            open(done) { I("open", "", null, done); },
+            paste() { return I("paste"); },
+            info(id) { return I("info", text(id)); },
+            copy(d) { need("clipboard.write"); return I("copy", "", d); },
+            update(id, d) { return I("update", text(id), d); },
+            save(id, d) { return I("save", text(id), d); },
+            saveAs(id, d, done) { need("files.save"); I("saveAs", text(id), d, done); },
+            discard(id) { I("discard", text(id)); },
+          });
+        })(),
         awake: Object.freeze({
           start(o = {}) { need("power.awake"); return N.awakeStart(num(o && o.minutes), !!(o && o.display)); },
           stop() { need("power.awake"); N.awakeStop(); },
@@ -885,7 +1095,13 @@ final class PackRuntime {
           if (KIND !== "utility") throw new Error('this pack is a game: call zephydian.game() (or set "kind": "utility")');
           if (game) throw new Error("zephydian.utility() was called twice");
           if (!u || typeof u !== "object" || typeof u.view !== "function") throw new TypeError("zephydian.utility() needs an object with view()");
-          game = u;
+          if (INPUT != null) {
+            // Running in the pack's own window: the window object takes the utility's place.
+            if (!u.window || typeof u.window.view !== "function") return;
+            game = u.window;
+          } else {
+            game = u;
+          }
         },
       });
 
@@ -903,7 +1119,7 @@ final class PackRuntime {
           if (name === "onAction" && v) f(v.id, v.action); else f(v);
         },
         setTheme(t) { z.theme = Object.freeze(t); },
-        start: () => { call("start"); },
+        start: () => { call("start", z.window.input); },
         draw: () => { const g = new Draw(); call("draw", g); return g._c; },
         tick: dt => { call("tick", dt); },
         key: e => call("key", Object.freeze(e)) === true,
@@ -912,6 +1128,8 @@ final class PackRuntime {
         pause: () => { call("pause"); },
         resume: () => { call("resume"); },
         undo: () => call("undo") === true,
+        redo: () => call("redo") === true,
+        shouldClose: () => call("shouldClose") !== false,
         fire: id => { const f = pending.get(id); pending.delete(id); if (f) f(); },
         clearTimers: () => { pending.clear(); },
         overlayPress: i => { const b = buttons[i]; if (b && typeof b.action === "function") b.action(); },
@@ -929,7 +1147,7 @@ final class PackRuntime {
     // MARK: Decoding
 
     private static func keyObject(_ e: PackKey) -> [String: Any] {
-        ["key": e.key, "shift": e.shift, "option": e.option, "repeat": e.isRepeat]
+        ["key": e.key, "shift": e.shift, "option": e.option, "repeat": e.isRepeat, "command": e.command]
     }
 
     static func jsonObject(_ s: String) -> [String: Any]? {
@@ -982,17 +1200,27 @@ final class PackRuntime {
             case "clear": shapes.append(.clear(c(1) ?? .theme("background")))
             case "rect": shapes.append(.rect(CGRect(x: d(1), y: d(2), width: d(3), height: d(4)), radius: max(0, d(8)), style(5)))
             case "circle": shapes.append(.circle(CGPoint(x: d(1), y: d(2)), radius: max(0, d(3)), style(4)))
+            case "ellipse": shapes.append(.ellipse(CGRect(x: d(1), y: d(2), width: d(3), height: d(4)), style(5)))
+            case "clip": shapes.append(.clip(CGRect(x: d(1), y: d(2), width: d(3), height: d(4)), radius: max(0, d(5))))
+            case "shadow": shapes.append(.shadow(c(1) ?? .rgba(0, 0, 0, 0.35), radius: min(max(d(2), 0), 500), dx: d(3), dy: d(4)))
+            case "symbol": shapes.append(.symbol(s(1), CGPoint(x: d(2), y: d(3)), size: min(max(d(4), 4), 4000), color: c(5) ?? .theme("text")))
+            case "gradient":
+                let colors = (item[safe: 6] as? [Any] ?? []).compactMap { ($0 as? String).flatMap(PackColor.init) }
+                shapes.append(.gradient(CGRect(x: d(1), y: d(2), width: d(3), height: d(4)), radius: max(0, d(5)), colors))
             case "line": shapes.append(.line(CGPoint(x: d(1), y: d(2)), CGPoint(x: d(3), y: d(4)), color: c(5) ?? .theme("text"),
                                              width: max(0, d(6)), round: d(7) == 1))
             case "path":
                 let flat = (item[safe: 1] as? [Any] ?? []).map { ($0 as? NSNumber)?.doubleValue ?? 0 }
                 let points = stride(from: 0, to: flat.count - 1, by: 2).map { CGPoint(x: flat[$0], y: flat[$0 + 1]) }
-                shapes.append(.path(points, closed: d(5) == 1, style(2)))
+                var pathStyle = style(2)
+                pathStyle.round = d(6) == 1
+                shapes.append(.path(points, closed: d(5) == 1, pathStyle))
             case "text":
                 shapes.append(.text(s(1), CGPoint(x: d(2), y: d(3)), size: min(max(d(4), 4), 200),
                                     weight: .init(rawValue: s(5)) ?? .regular, color: c(6) ?? .theme("text"),
                                     align: .init(rawValue: s(7)) ?? .left, font: .init(rawValue: s(8)) ?? .system))
-            case "image": shapes.append(.image(s(1), CGRect(x: d(2), y: d(3), width: d(4), height: d(5)), opacity: min(max(d(6), 0), 1)))
+            case "image": shapes.append(.image(s(1), CGRect(x: d(2), y: d(3), width: d(4), height: d(5)), opacity: min(max(d(6), 0), 1),
+                                               pixelate: min(max(d(7), 0), 500)))
             case "save": shapes.append(.save)
             case "restore": shapes.append(.restore)
             case "translate": shapes.append(.translate(d(1), d(2)))

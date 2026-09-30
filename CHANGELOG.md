@@ -7,6 +7,22 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-09-29
+
+### Added
+- **Markup**, a new utility in the Library, in its own window with a dark artboard, a tool rail and a style bar (Zephydian shows in the Dock while it's open). It opens on cropping, with a box you resize by its corners and edges like editing a photo on iPhone (Freeform, Original, Square, 4:3, 16:9). Then select, move and resize marks, draw arrows (filled, outline, open or double), lines, rectangles, ellipses and freehand lines, highlight, pixelate (five strengths), redact, add text (12 to 64 pt), number steps and add stickers, in eight colors and three line weights, with shadows on marks, gradient backdrops, layers, and undo and redo. Open a screenshot from this session, an image file or a pasted image, then Copy, Save or Save As.
+- Markup shows the Zephydian jet at the top, and credits Vorssaint, whose screenshot editor inspired its design, at the bottom.
+- Click a screenshot's preview to open it in Markup. Closing Markup asks whether to save or delete the screenshot (or cancel); for a file, whether to save your changes.
+- **Pack SDK 3**: utilities can open their own window, edit images, and use a canvas that follows the pointer. See `docs/PACKS.md`.
+
+### Changed
+- Selecting an area for a screenshot shows a rounded, glowing border in your accent color and the size in pixels under it. The crosshair shows as soon as the selection starts, not only once you press.
+- The screenshot preview has no Edit button anymore: click the picture instead.
+- Saving a screenshot that was already saved (after editing it) replaces its file instead of making a second one.
+
+### Fixed
+- Removing a utility no longer clears this session's screenshots (only removing Screenshot does).
+
 ## [0.5.0] - 2026-09-29
 
 ### Added

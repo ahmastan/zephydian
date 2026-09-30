@@ -15,7 +15,7 @@ import CryptoKit
 import Foundation
 import JavaScriptCore
 
-let sdkVersion = 2                       // the newest SDK version the tools (and app) know
+let sdkVersion = 3                       // the newest SDK version the tools (and app) know
 let utilitySDK = 2                       // utilities need SDK 2 or newer
 let maxPackBytes = 5 * 1024 * 1024
 let maxScriptBytes = 512 * 1024
@@ -24,9 +24,13 @@ let assetExtensions: Set<String> = ["png", "json", "txt"]
 /// What packs may declare in "capabilities" (the app shows each one before install).
 let knownCapabilities: Set<String> = [
     "clipboard.write", "clipboard.read", "power.awake", "notifications", "screen.capture",
-    "color.sample", "files.save", "windows", "system.stats", "timers", "shortcut",
+    "color.sample", "files.save", "windows", "system.stats", "timers", "shortcut", "images.edit",
 ]
 let capabilitySDK = 2                    // capabilities arrived in SDK 2
+/// Capabilities that arrived later, with the SDK version that brought them.
+let laterCapabilities = ["windows": 3, "images.edit": 3]
+/// What a pack may offer to open for other utilities ("handles").
+let knownHandles: Set<String> = ["image"]
 
 struct Failure: Error, CustomStringConvertible { let description: String }
 func fail(_ message: String) -> Never {
@@ -50,6 +54,8 @@ struct Manifest: Codable {
     /// An SF Symbol name used as the icon (icon.png is then made from it when the pack has none).
     var symbol: String?
     var capabilities: [String]?
+    /// What the utility opens for others (SDK 3): "image" makes it the screenshot editor.
+    var handles: [String]?
 }
 
 /// "1.2.3" → [1, 2, 3]; nil if it isn't three whole numbers.
@@ -133,6 +139,16 @@ func checkPack(_ folder: URL) throws -> Pack {
             throw problem("unknown capability \"\(unknown)\" (known: \(knownCapabilities.sorted().joined(separator: ", ")))")
         }
         if Set(caps).count != caps.count { throw problem("a capability is listed twice") }
+        if let (cap, needed) = caps.compactMap({ c in laterCapabilities[c].map { (c, $0) } }).first(where: { m.sdkVersion < $0.1 }) {
+            throw problem("\"\(cap)\" needs sdkVersion \(needed) or newer")
+        }
+    }
+    if let handles = m.handles {
+        if m.kind != "utility" || m.sdkVersion < 3 { throw problem("handles is for utilities with sdkVersion 3 or newer") }
+        if let unknown = handles.first(where: { !knownHandles.contains($0) }) { throw problem("unknown handles value \"\(unknown)\"") }
+        if handles.contains("image") && !Set(m.capabilities ?? []).isSuperset(of: ["windows", "images.edit"]) {
+            throw problem("an image editor (handles \"image\") needs the windows and images.edit capabilities")
+        }
     }
     if let s = m.tileStat, !["bestScore", "bestTime", "none"].contains(s) {
         throw problem("tileStat must be bestScore, bestTime or none")
