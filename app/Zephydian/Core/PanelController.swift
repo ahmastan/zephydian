@@ -49,6 +49,9 @@ final class PanelController: NSObject {
     private var clickMonitor: Any?
     /// True while any menu (a dropdown, the ⋯ menu, a picker) is open. Auto-hide waits for it to close.
     private var menuIsOpen = false
+    /// Set when a key goes to a utility's text field. Smart auto-hide then waits while that field
+    /// keeps the cursor, like typing a note. Just having the cursor there (without typing) doesn't count.
+    private var typedInUtility = false
     private var keyMonitor: Any?
     private var keyUpMonitor: Any?
 
@@ -71,6 +74,7 @@ final class PanelController: NSObject {
 
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.isOpen, self.panel.isKeyWindow else { return event }
+            if self.model.isShowingGame, self.panel.firstResponder is NSText { self.typedInUtility = true }
             return self.handleKey(event) ? nil : event
         }
         // Real-time games (Airship) need to know when a held key is released.
@@ -95,6 +99,7 @@ final class PanelController: NSObject {
         guard !isOpen else { return }
         isOpen = true
         armed = false
+        typedInUtility = false
         if !model.isOnboarding {
             notes.reloadChangedFiles()
             model.panelOpenCount += 1
@@ -336,8 +341,16 @@ final class PanelController: NSObject {
         return switch settings.autoHide {
         case .never: false
         case .always: true
-        case .smart: !model.isPlayingGame && !model.isTypingNote
+        case .smart: !model.isPlayingGame && !model.isTypingNote && !isTypingInUtility
         }
+    }
+
+    /// A utility's text field has the cursor and has been typed in.
+    private var isTypingInUtility: Bool {
+        guard typedInUtility else { return false }
+        if model.isShowingGame, panel.firstResponder is NSText { return true }
+        typedInUtility = false                                  // the field let go of the cursor
+        return false
     }
 
     func mouseMoved(to p: NSPoint) {

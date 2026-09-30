@@ -1,0 +1,11 @@
+{
+  "id": "dictionary",
+  "name": "Dictionary",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 4,
+  "description": "Definitions, synonyms and opposites from the dictionary built into your Mac.",
+  "symbol": "character.book.closed",
+  "capabilities": ["dictionary", "clipboard.text", "clipboard.write", "shortcut"],
+  "whatsNew": "First release."
+}

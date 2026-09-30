@@ -7,6 +7,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+- **Dictionary**, a new utility in the Library: definitions from the dictionary that comes with your Mac (senses, examples, phrases and origins), and a **Synonyms** tab with synonyms and opposites from its thesaurus. Click a synonym to look it up, go back, hear a word said aloud, and see a word of the day and your recent searches. Everything works offline, and nothing is downloaded.
+- Copy a word anywhere and press Dictionary's own keyboard shortcut (or its clipboard button) to look it up.
+- **Pack SDK 4**: the `dictionary` and `clipboard.text` capabilities, a `shortcut()` hook for utilities opened by their shortcut, wrapping rows, chip and icon buttons, and serif and italic text. See `docs/PACKS.md`.
+
+### Fixed
+- With Smart auto-hide, the panel now hides when the pointer leaves it while a utility is open, as it does everywhere except in games. It still stays open while you're typing in a utility's field, as it does for notes.
+- A utility or game that reloads while it's still open (for example one that stopped working, opened again) now starts properly instead of showing an empty screen.
+
 ## [0.5.1] - 2026-09-29
 
 ### Added

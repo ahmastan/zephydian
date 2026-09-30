@@ -33,7 +33,7 @@ nonisolated enum AutoHideMode: String, CaseIterable, Identifiable {
 
     var explanation: String {
         switch self {
-        case .smart: "Hides when the mouse leaves, but never while a game is open or you’re typing a note."
+        case .smart: "Hides when the mouse leaves, but never while a game is open or you’re typing (in a note or a utility)."
         case .always: "Hides whenever the mouse leaves the panel. Games pause automatically."
         case .never: "Only Esc, a click outside, or the corner closes the panel."
         }

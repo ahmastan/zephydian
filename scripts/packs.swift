@@ -15,7 +15,7 @@ import CryptoKit
 import Foundation
 import JavaScriptCore
 
-let sdkVersion = 3                       // the newest SDK version the tools (and app) know
+let sdkVersion = 4                       // the newest SDK version the tools (and app) know
 let utilitySDK = 2                       // utilities need SDK 2 or newer
 let maxPackBytes = 5 * 1024 * 1024
 let maxScriptBytes = 512 * 1024
@@ -24,11 +24,11 @@ let assetExtensions: Set<String> = ["png", "json", "txt"]
 /// What packs may declare in "capabilities" (the app shows each one before install).
 let knownCapabilities: Set<String> = [
     "clipboard.write", "clipboard.read", "power.awake", "notifications", "screen.capture",
-    "color.sample", "files.save", "windows", "system.stats", "timers", "shortcut", "images.edit",
+    "color.sample", "files.save", "windows", "system.stats", "timers", "shortcut", "images.edit", "dictionary", "clipboard.text",
 ]
 let capabilitySDK = 2                    // capabilities arrived in SDK 2
 /// Capabilities that arrived later, with the SDK version that brought them.
-let laterCapabilities = ["windows": 3, "images.edit": 3]
+let laterCapabilities = ["windows": 3, "images.edit": 3, "dictionary": 4, "clipboard.text": 4]
 /// What a pack may offer to open for other utilities ("handles").
 let knownHandles: Set<String> = ["image"]
 

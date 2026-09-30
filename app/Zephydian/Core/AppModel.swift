@@ -59,8 +59,8 @@ final class AppModel {
     }
     func closeLibrary() { isShowingLibrary = false }
 
-    /// Stops Smart auto-hide while a game is open.
-    var isPlayingGame: Bool { isShowingGame }
+    /// Stops Smart auto-hide while a game is open. Utilities open on the same screen but hide as usual.
+    var isPlayingGame: Bool { isShowingGame && (gameSession as? PackSession)?.isUtility != true }
 
     func openGame(_ id: String) {
         guard let info = GameRegistry.info(for: id), let make = info.makeSession else { return }

@@ -46,6 +46,7 @@ final class PackServices {
     @ObservationIgnored lazy var capture = ScreenCapture(services: self)
     @ObservationIgnored lazy var images = PackImages(services: self)
     @ObservationIgnored lazy var windows = PackWindows(services: self)
+    @ObservationIgnored lazy var dictionary = PackDictionary()
 
     /// Set by AppDelegate: hides the panel (before a screenshot), and the app's settings (for the
     /// look of the screenshot preview card).

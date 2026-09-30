@@ -102,6 +102,13 @@ final class PackSession: GameSession, PackHost {
         return failure == nil && runtime.redo()
     }
 
+    /// Opened with the utility's own shortcut: it's on screen again, then its `shortcut()` runs.
+    func shortcutPressed() {
+        guard failure == nil else { return }
+        resume()
+        runtime.shortcut()
+    }
+
     /// The window's close button or ⌘W: false if the pack keeps it open for now.
     func shouldClose() -> Bool { failure != nil || runtime.shouldClose() }
 

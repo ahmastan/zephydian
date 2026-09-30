@@ -24,7 +24,7 @@ nonisolated struct PackManifest: Codable, Equatable {
 /// A pack on disk, ready to run: its folder, manifest and script.
 struct PackBundle {
     /// The newest SDK version this app can run.
-    static let sdkVersion = 3
+    static let sdkVersion = 4
     /// Utilities arrived in SDK 2.
     static let utilitySDK = 2
 

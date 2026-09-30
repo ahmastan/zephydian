@@ -72,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.model.tab = .utilities
             self.model.openGame(id)
             self.panel.show()
+            (self.model.gameSession as? PackSession)?.shortcutPressed()
         }
         // A screenshot's Edit button opens the installed image editor (Markup) in its own window.
         services.imageEditor = { PackLibrary.shared.packs.first(where: \.isImageEditor)?.id }

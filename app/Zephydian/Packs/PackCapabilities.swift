@@ -14,6 +14,7 @@ nonisolated struct PackCapability: Equatable {
 
     static let all: [PackCapability] = [
         .init(id: "clipboard.write", short: "clipboard", sentence: "Copy text to your clipboard"),
+        .init(id: "clipboard.text", short: "copied text", sentence: "Read the text you've copied, only while it's on screen"),
         .init(id: "clipboard.read", short: "clipboard history",
               sentence: "Read what you copy, in the background while it's switched on", runsInBackground: true),
         .init(id: "power.awake", short: "keep awake",
@@ -27,6 +28,8 @@ nonisolated struct PackCapability: Equatable {
               sentence: "Open your screenshots, an image you pick or one you paste, and save the edited copy where you choose"),
         .init(id: "system.stats", short: "system stats", sentence: "Read CPU, memory, disk, battery and network use"),
         .init(id: "timers", short: "timers", sentence: "Run timers in the background and play a sound when they end", runsInBackground: true),
+        .init(id: "dictionary", short: "your Mac's dictionary",
+              sentence: "Look up words in the dictionary and thesaurus that come with macOS, and say them aloud"),
         .init(id: "shortcut", short: "a shortcut", sentence: "Open itself with a keyboard shortcut you choose"),
     ]
 
