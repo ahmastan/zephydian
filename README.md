@@ -69,6 +69,25 @@ Open **Get more** at the end of the Games or Utilities grid to add or remove gam
 - **Your choice.** Nothing is installed without you. Removing a game keeps its progress in case you come back, unless you choose to delete that too.
 - **Updates** install quietly, never while you're playing. Turn off the daily check in **Settings → Packs**.
 
+### What each utility can use
+
+Nothing here uses the internet. Copy buttons you click work in every utility and aren't listed.
+
+| Utility | What it can use |
+| --- | --- |
+| Awake | Keeps your Mac awake while it's switched on (in the background) |
+| Calculator | Nothing extra |
+| Clipboard | Reads what you copy while recording is on (in the background, never what password managers mark private), and its own keyboard shortcut |
+| Colors | The color of a spot on your screen that you pick |
+| Dictionary | The dictionary and thesaurus built into macOS, the text you copied (only while it's on screen), copying, and its own keyboard shortcut |
+| Markup | Its own window, the screenshots you took, images you open or paste, copying, and saving where you choose |
+| Passwords | Nothing extra |
+| QR Code | Copying, and saving where you choose |
+| Screenshot | Pictures of your screen (macOS asks for Screen Recording permission first), saving to Pictures/Screenshots or a folder you pick, and its own keyboard shortcut |
+| System | CPU, memory, disk, battery and network figures for the whole Mac, read only while it's on screen |
+| Text | Nothing extra |
+| Timer | Running timers in the background, and notifications (macOS asks first) |
+
 Want to make a game or a utility? See [docs/PACKS.md](docs/PACKS.md).
 
 ## Tip: Hot Corners
