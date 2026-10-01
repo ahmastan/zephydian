@@ -3,16 +3,20 @@ import SwiftUI
 struct AirshipView: View {
     let game: AirshipGame
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.boardScale) private var scale
 
     var body: some View {
         let world = game.world
-        let accent = settings.accent.color
-        let field = AirshipGame.field
+        let accent = settings.accentColor
+        // The game world is always `AirshipGame.field` points; the view draws it scaled to the panel.
+        let scale = scale
+        let field = CGSize(width: AirshipGame.field.width * scale, height: AirshipGame.field.height * scale)
 
         ZStack {
             Canvas { context, size in
                 context.fill(Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 10), with: .color(Tokens.fill))
                 context.clip(to: Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 10))
+                context.scaleBy(x: scale, y: scale)
 
                 for star in world.stars {
                     let r: CGFloat = star.speed > 50 ? 1.2 : 0.8
@@ -48,12 +52,12 @@ struct AirshipView: View {
             .frame(width: field.width, height: field.height)
             .contentShape(Rectangle())
             .onContinuousHover { phase in
-                if case .active(let point) = phase { game.mouseMoved(to: point) } else { game.mouseMoved(to: nil) }
+                if case .active(let point) = phase { game.mouseMoved(to: CGPoint(x: point.x / scale, y: point.y / scale)) } else { game.mouseMoved(to: nil) }
             }
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        game.mouseMoved(to: value.location)
+                        game.mouseMoved(to: CGPoint(x: value.location.x / scale, y: value.location.y / scale))
                         game.setMouseFiring(true)
                     }
                     .onEnded { _ in game.setMouseFiring(false) }

@@ -17,6 +17,9 @@ struct RootView: View {
             } else if model.isShowingGame {
                 GameScreen()
                     .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
+            } else if model.isShowingStats {
+                StatsView()
+                    .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
             } else if model.isShowingLibrary {
                 LibraryView()
                     .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
@@ -43,10 +46,12 @@ struct RootView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .environment(\.boardScale, model.boardScale)
         .clipShape(RoundedRectangle(cornerRadius: settings.effectivePanelStyle.cornerRadius, style: .continuous))
         .animation(.easeOut(duration: 0.2), value: model.isShowingGame)
         .animation(.easeOut(duration: 0.2), value: model.isShowingLibrary)
-        .tint(settings.accent.color)
+        .animation(.easeOut(duration: 0.2), value: model.isShowingStats)
+        .tint(settings.accentColor)
         .panelButtonStyle()
         .overlay {
             // Frosted only: Apple's hairline edge (a faint light rim in dark mode, a soft dark edge in light mode).

@@ -7,10 +7,25 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-30
+
 ### Added
 - **Dictionary**, a new utility in the Library: definitions from the dictionary that comes with your Mac (senses, examples, phrases and origins), and a **Synonyms** tab with synonyms and opposites from its thesaurus. Click a synonym to look it up, go back, hear a word said aloud, and see a word of the day and your recent searches. Everything works offline, and nothing is downloaded.
 - Copy a word anywhere and press Dictionary's own keyboard shortcut (or its clipboard button) to look it up.
+- **Panel size**: choose Small, Medium or Large in Settings → Appearance. Game boards grow or shrink with the panel, and text stays the same size.
+- **Notes**:
+  - **Open Notes in their own window** with the new button in the Notes tab: move and resize it anywhere, and pin it on top of other apps. Put it back in the panel any time.
+  - **Pin a single note to your screen**: in the Notes window, drag its tab out and let go anywhere. It floats above your other apps on every desktop, and you can move it, resize it, rename it and use all the note options from it. Pin as many as you like; they come back where you left them. Its pin unpins it.
+  - A **Markdown preview** (the eye button or ⌘E) with checkboxes you can tick.
+  - **Search** across every note (⌘F), and **export** a note as a `.md` file or all notes as a zip.
+  - Make a line bigger or smaller with ⌘+ / ⌘− (it becomes a Markdown heading, so the note stays plain Markdown).
+  - Up to 20 notes (was 5).
+- **System accent color**: a new first choice in Settings → Appearance → Accent that follows your Mac's accent color and changes as soon as you change it in System Settings.
+- **Stats**: a new Stats button above the Games grid shows games played, wins, best scores and times, average scores and a days-in-a-row streak for each built-in game, with Reset for one game or all.
 - **Pack SDK 4**: the `dictionary` and `clipboard.text` capabilities, a `shortcut()` hook for utilities opened by their shortcut, wrapping rows, chip and icon buttons, and serif and italic text. See `docs/PACKS.md`.
+
+### Changed
+- **Get more** is now a button above the Games and Utilities grids (next to the new Stats button) instead of the last tile.
 
 ### Fixed
 - With Smart auto-hide, the panel now hides when the pointer leaves it while a utility is open, as it does everywhere except in games. It still stays open while you're typing in a utility's field, as it does for notes.

@@ -4,12 +4,13 @@ struct FiveView: View {
     let game: FiveGame
     @Environment(SettingsStore.self) private var settings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.boardScale) private var scale
 
     private static let rows = ["QWERTYUIOP", "ASDFGHJKL", "↵ZXCVBNM⌫"]
 
     var body: some View {
         ZStack(alignment: .top) {
-            VStack(spacing: 10) {
+            VStack(spacing: 10 * scale) {
                 board
                 actions
                 keyboard
@@ -31,9 +32,9 @@ struct FiveView: View {
     // MARK: Board
 
     private var board: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 5 * scale) {
             ForEach(0..<FiveGame.maxGuesses, id: \.self) { row in
-                HStack(spacing: 5) {
+                HStack(spacing: 5 * scale) {
                     ForEach(0..<FiveGame.length, id: \.self) { col in
                         tile(row: row, col: col)
                     }
@@ -57,7 +58,7 @@ struct FiveView: View {
         // Faint hint letter in the row being typed, until the player types over that spot.
         let ghost = row == game.guesses.count && letter == nil && !game.isDone ? game.knownPositions[col] : nil
 
-        FiveTile(letter: letter, ghost: ghost, mark: mark, colors: colors)
+        FiveTile(letter: letter, ghost: ghost, mark: mark, colors: colors, size: 44 * scale)
     }
 
     // MARK: Hint & reveal
@@ -77,7 +78,7 @@ struct FiveView: View {
             .help(game.mode == .daily ? "Show the answer (counts as a loss)" : "Show the answer")
         }
         .buttonStyle(ActionPillStyle())
-        .frame(width: 329)
+        .frame(width: 329 * scale)
         .alert("Reveal today’s word?", isPresented: Binding(get: { game.confirmingReveal }, set: { game.confirmingReveal = $0 })) {
             Button("Reveal", role: .destructive) { game.revealAnswer() }
             Button("Keep trying", role: .cancel) {}
@@ -90,9 +91,9 @@ struct FiveView: View {
 
     private var keyboard: some View {
         let marks = game.keyboardMarks
-        return VStack(spacing: 6) {
+        return VStack(spacing: 6 * scale) {
             ForEach(Self.rows, id: \.self) { row in
-                HStack(spacing: 4) {
+                HStack(spacing: 4 * scale) {
                     ForEach(Array(row), id: \.self) { key in
                         keyButton(key, mark: marks[key])
                     }
@@ -112,7 +113,7 @@ struct FiveView: View {
         } label: {
             Text(key == "↵" ? "Enter" : String(key))
                 .font(.system(size: wide ? 11 : 13, weight: .semibold))
-                .frame(width: wide ? 47 : 29, height: 38)
+                .frame(width: (wide ? 47 : 29) * scale, height: 38 * scale)
                 .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(colors.key(mark)))
                 .foregroundStyle(colors.keyText(mark))
                 .contentShape(Rectangle())
@@ -262,13 +263,14 @@ private struct FiveTile: View {
     var ghost: Character?
     let mark: FiveGame.Mark?
     let colors: FiveColors
+    var size: CGFloat = 44
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Text((letter ?? ghost).map(String.init) ?? "")
-            .font(.system(size: 22, weight: .bold, design: .rounded))
+            .font(.system(size: 22 * size / 44, weight: .bold, design: .rounded))
             .foregroundStyle(textStyle)
-            .frame(width: 44, height: 44)
+            .frame(width: size, height: size)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(mark.map(colors.fill) ?? .clear))
             .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(border, lineWidth: 1.5))
             .keyframeAnimator(initialValue: 0.0, trigger: mark) { content, angle in

@@ -28,6 +28,10 @@ final class AppModel {
 
     /// Increases every time the panel opens, so views can react (e.g. focus the notes editor).
     var panelOpenCount = 0
+    /// The panel's size compared with the Medium size, for game boards (see `EnvironmentValues.boardScale`).
+    var boardScale: CGFloat = 1
+    /// Notes: the search field and results are showing instead of the tabs and editor (⌘F).
+    var isSearchingNotes = false
 
     // MARK: Games
 
@@ -58,6 +62,11 @@ final class AppModel {
         return tab == .utilities ? "utilities" : "games"
     }
     func closeLibrary() { isShowingLibrary = false }
+
+    /// True while the Stats screen (opened from the Games grid's Stats tile) is showing.
+    private(set) var isShowingStats = false
+    func openStats() { isShowingStats = true }
+    func closeStats() { isShowingStats = false }
 
     /// Stops Smart auto-hide while a game is open. Utilities open on the same screen but hide as usual.
     var isPlayingGame: Bool { isShowingGame && (gameSession as? PackSession)?.isUtility != true }
@@ -99,6 +108,10 @@ final class AppModel {
     @ObservationIgnored var closePanel: () -> Void = {}
     @ObservationIgnored var startOnboarding: () -> Void = {}
     @ObservationIgnored var finishOnboarding: () -> Void = {}
+    /// Notes in their own window: open it (from the panel's Notes tab), bring it forward, or put Notes back in the panel.
+    @ObservationIgnored var detachNotes: () -> Void = {}
+    @ObservationIgnored var showNotesWindow: () -> Void = {}
+    @ObservationIgnored var attachNotes: () -> Void = {}
     /// A game was closed or replaced by another one (lets a waiting pack update install).
     @ObservationIgnored var gameDidClose: (String) -> Void = { _ in }
 

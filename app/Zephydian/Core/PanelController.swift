@@ -62,7 +62,7 @@ final class PanelController: NSObject {
         self.settings = settings
         self.model = model
         self.notes = notes
-        panel = FloatingPanel(size: Tokens.panelSize)
+        panel = FloatingPanel(size: settings.panelSize.size)
         let hostingView = NSHostingView(rootView: RootView().environment(settings).environment(model).environment(notes)
             .environment(PackLibrary.shared).environment(PackManager.shared).environment(PackServices.shared))
         hostingView.sizingOptions = []
@@ -298,8 +298,12 @@ final class PanelController: NSObject {
     private func targetFrame() -> NSRect {
         guard let visible = settings.targetScreen?.visibleFrame else { return panel.frame }
         let inset = Tokens.edgeInset
-        let size = NSSize(width: Tokens.panelSize.width,
-                          height: min(Tokens.panelSize.height, visible.height - inset * 2))
+        let chosen = model.isOnboarding ? Tokens.basePanelSize : settings.panelSize.size
+        // Taller than the screen: keep the width and shorten it to fit.
+        let size = NSSize(width: chosen.width, height: min(chosen.height, visible.height - inset * 2))
+        // Boards scale with the room under a game's header and hint line, which keep their size.
+        let base = Tokens.basePanelSize, chrome = Tokens.gameChromeHeight
+        model.boardScale = min(size.width / base.width, (size.height - chrome) / (base.height - chrome))
         if model.isOnboarding {
             return NSRect(x: visible.midX - size.width / 2, y: visible.midY - size.height / 2,
                           width: size.width, height: size.height)
@@ -324,7 +328,9 @@ final class PanelController: NSObject {
     private func pointerIsInside(_ p: NSPoint) -> Bool {
         let frame = panel.frame
         if frame.contains(p) { return true }
-        for window in NSApp.windows where window !== panel && window.isVisible && window.frame.width > 4 && window.frame.contains(p) {
+        // Floating notes and the Notes window don't count: moving to one is leaving the panel.
+        for window in NSApp.windows where window !== panel && !(window is FloatingNoteWindow) && !(window is NotesWindow) && window.isVisible
+            && window.frame.width > 4 && window.frame.contains(p) {
             return true
         }
         if !model.isOnboarding, let screen = settings.targetScreen?.frame {
@@ -409,10 +415,16 @@ final class PanelController: NSObject {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if event.keyCode == 53 { // Esc
             if model.isRenamingNote { return false } // let the rename field cancel itself
+            if model.isSearchingNotes, model.tab == .notes, !settings.notesDetached, !model.isShowingGame, !model.isShowingLibrary {
+                model.isSearchingNotes = false
+                return true
+            }
             if model.isOnboarding {
                 finishOnboarding()
             } else if model.isShowingGame {
                 model.closeGame()
+            } else if model.isShowingStats {
+                model.closeStats()
             } else if model.isShowingLibrary {
                 model.closeLibrary()
             } else {
@@ -440,6 +452,7 @@ final class PanelController: NSObject {
         case "1", "2", "3", "4", ",":
             if model.isShowingGame { model.closeGame() }
             model.closeLibrary()
+            model.closeStats()
             model.tab = switch key {
             case "1": .games
             case "2": .utilities
@@ -454,23 +467,10 @@ final class PanelController: NSObject {
         return true
     }
 
-    /// Notes-tab shortcuts: ⌘T new note, ⌘W close note, ⌃Tab / ⌃⇧Tab switch notes.
     private func handleNotesKey(_ event: NSEvent, flags: NSEvent.ModifierFlags) -> Bool {
-        if event.keyCode == 48, flags.contains(.control) { // Tab
-            notes.selectNext(offset: flags.contains(.shift) ? -1 : 1)
-            return true
-        }
-        guard flags == .command else { return false }
-        switch event.charactersIgnoringModifiers?.lowercased() {
-        case "t":
-            notes.addNote()
-            return true
-        case "w" where notes.notes.count > 1:
-            if let id = notes.activeID { notes.requestDelete(id) }
-            return true
-        default:
-            return false
-        }
+        // While Notes are in their own window, that window has the shortcuts.
+        guard !settings.notesDetached else { return false }
+        return NotesKeys.handle(event, notes: notes, model: model)
     }
 }
 

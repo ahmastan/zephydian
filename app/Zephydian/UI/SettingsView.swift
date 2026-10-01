@@ -52,6 +52,10 @@ struct SettingsView: View {
                                 .frame(width: 176)
                         }
                     }
+                    SettingsRow(label: "Panel size") {
+                        SegmentedControl(selection: $settings.panelSize, options: PanelSize.allCases, title: \.title)
+                            .frame(width: 176)
+                    }
                     SettingsRow(label: "Accent") {
                         accentSwatches
                     }
@@ -167,16 +171,17 @@ struct SettingsView: View {
         HStack(spacing: 6) {
             ForEach(AccentTheme.allCases) { theme in
                 let selected = settings.accent == theme
+                // System's swatch shows macOS's current accent (redrawn when it changes).
+                let swatchColor = theme == .system ? Color(nsColor: theme.nsColor) : theme.color
                 Button { settings.accent = theme } label: {
-                    Circle()
-                        .fill(theme.color)
+                    swatch(theme, color: swatchColor)
                         .overlay(Circle().strokeBorder(.black.opacity(0.15), lineWidth: 0.5))
                         .frame(width: 18, height: 18)
                         .padding(3)
                         .overlay {
                             // Frosted: a ring in the swatch's color. Liquid Glass: a glass bubble behind it.
                             if !settings.usesGlass {
-                                Circle().strokeBorder(selected ? theme.color : .clear, lineWidth: 2)
+                                Circle().strokeBorder(selected ? swatchColor : .clear, lineWidth: 2)
                             }
                         }
                         .background { if selected { selectionBubble(Circle()) } }
@@ -189,6 +194,18 @@ struct SettingsView: View {
             }
         }
         .animation(selectionAnimation, value: settings.accent)
+        .id(settings.systemAccentRevision)   // redraw System's swatch when macOS's accent changes
+    }
+
+    /// A plain color dot, or for System a rainbow ring (like macOS's Multicolor swatch) around macOS's accent.
+    @ViewBuilder private func swatch(_ theme: AccentTheme, color: Color) -> some View {
+        if theme == .system {
+            Circle()
+                .fill(AngularGradient(colors: [.red, .orange, .yellow, .green, .cyan, .blue, .purple, .pink, .red], center: .center))
+                .overlay(Circle().fill(color).padding(4))
+        } else {
+            Circle().fill(color)
+        }
     }
 
     /// The glass bubble behind the selected accent swatch or menu bar icon (Liquid Glass only).
@@ -209,7 +226,8 @@ struct SettingsView: View {
                     icon.swiftUIImage
                         .frame(width: 15, height: 15)
                         .font(.system(size: 13))
-                        .frame(width: 26, height: 24)
+                        // Slightly narrower in the Small panel, so the label stays on one line.
+                        .frame(width: settings.panelSize == .small ? 23 : 26, height: 24)
                         .foregroundStyle(iconStyle(selected: selected))
                         .background {
                             if settings.usesGlass {

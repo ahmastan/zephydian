@@ -237,13 +237,13 @@ struct UtilityView: View {
             }
             .onAppear {
                 session.resume()        // utilities carry on as soon as they're on screen again
-                session.updateTheme(dark: colorScheme == .dark, accent: settings.accent.nsColor)
+                session.updateTheme(dark: colorScheme == .dark, accent: settings.accentNSColor)
                 session.setSize(CGSize(width: max(1, proxy.size.width - 32), height: proxy.size.height))
             }
             .onChange(of: proxy.size) { _, size in session.setSize(CGSize(width: max(1, size.width - 32), height: size.height)) }
         }
-        .onChange(of: colorScheme) { _, scheme in session.updateTheme(dark: scheme == .dark, accent: settings.accent.nsColor) }
-        .onChange(of: settings.accent) { _, accent in session.updateTheme(dark: colorScheme == .dark, accent: accent.nsColor) }
+        .onChange(of: colorScheme) { _, scheme in session.updateTheme(dark: scheme == .dark, accent: settings.accentNSColor) }
+        .onChange(of: settings.accentNSColor) { _, accent in session.updateTheme(dark: colorScheme == .dark, accent: accent) }
         // A service stopped from Settings (or timed out) changes what the utility shows.
         .onChange(of: services.running) { session.refresh() }
         .onChange(of: services.revision) { session.refresh() }
@@ -271,7 +271,7 @@ private struct PackNodeView: View {
             let text = Text(string)
                 .font(Self.font(style))
                 .italic(italic)
-                .foregroundStyle(color.map { AnyShapeStyle(PackView.color($0, accent: settings.accent.color)) }
+                .foregroundStyle(color.map { AnyShapeStyle(PackView.color($0, accent: settings.accentColor)) }
                                  ?? (style == .secondary || style == .caption ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary)))
                 .multilineTextAlignment(align == .center ? .center : align == .right ? .trailing : .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -435,7 +435,7 @@ private struct PackNodeView: View {
                 .id(node.id)
 
         case let .canvas(canvas):
-            let accent = settings.accent.color
+            let accent = settings.accentColor
             Canvas { context, size in
                 PackView.render(canvas.shapes, in: context, size: size, accent: accent, image: session.image(named:))
             }
@@ -470,7 +470,7 @@ private struct PackNodeView: View {
         case let .swatch(color, size, selected, pressable, true):
             // A color dot: the color in a circle, with a ring around the chosen one.
             let dot = ZStack {
-                Circle().fill(PackView.color(color, accent: settings.accent.color))
+                Circle().fill(PackView.color(color, accent: settings.accentColor))
                     .overlay(Circle().strokeBorder(Color.primary.opacity(0.22), lineWidth: 0.5))
                     .frame(width: size, height: size)
                 if selected { Circle().strokeBorder(Color.primary.opacity(0.9), lineWidth: 1.5).frame(width: size + 6, height: size + 6) }
@@ -490,7 +490,7 @@ private struct PackNodeView: View {
         case let .swatch(color, size, selected, pressable, _):
             let shape = RoundedRectangle(cornerRadius: min(8, size / 4), style: .continuous)
             let swatch = shape
-                .fill(PackView.color(color, accent: settings.accent.color))
+                .fill(PackView.color(color, accent: settings.accentColor))
                 .overlay(shape.strokeBorder(.separator))
                 .overlay(shape.inset(by: -3).strokeBorder(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear), lineWidth: 2))
                 .frame(width: size, height: size)
@@ -782,14 +782,14 @@ struct PackWindowView: View {
                 }
             }
             .onAppear {
-                session.updateTheme(dark: colorScheme == .dark, accent: settings.accent.nsColor)
+                session.updateTheme(dark: colorScheme == .dark, accent: settings.accentNSColor)
                 session.setSize(proxy.size)
             }
             .onChange(of: proxy.size) { _, size in session.setSize(size) }
         }
-        .tint(settings.accent.color)
-        .onChange(of: colorScheme) { _, scheme in session.updateTheme(dark: scheme == .dark, accent: settings.accent.nsColor) }
-        .onChange(of: settings.accent) { _, accent in session.updateTheme(dark: colorScheme == .dark, accent: accent.nsColor) }
+        .tint(settings.accentColor)
+        .onChange(of: colorScheme) { _, scheme in session.updateTheme(dark: scheme == .dark, accent: settings.accentNSColor) }
+        .onChange(of: settings.accentNSColor) { _, accent in session.updateTheme(dark: colorScheme == .dark, accent: accent) }
         .animation(.easeOut(duration: 0.2), value: session.toast)
     }
 }

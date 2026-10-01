@@ -132,7 +132,7 @@ When a card from `z.overlay()` is showing, Enter presses its prominent button.
 `z` is a global object available everywhere in `main.js`.
 
 **Screen**
-- `z.width`, `z.height`: the size of the game area in points. It can differ between Macs, so always draw from these.
+- `z.width`, `z.height`: the size of the game area in points. It differs with the panel size people choose (Small, Medium or Large) and between Macs, so always draw from these.
 - `z.redraw()`: ask for `draw(g)` to be called again before the next frame. Calling it several times in a row still draws once.
 - `z.theme`: `{ dark, accent, text, secondary, fill, background }`. `dark` is true in dark mode, and the rest are color strings for the current appearance and accent (see Colors).
 

@@ -79,6 +79,7 @@ final class Game2048: GameSession {
         spawnTile()
         spawnTile()
         save()
+        GameStats.started("2048")
     }
 
     func keepGoing() {
@@ -138,6 +139,7 @@ final class Game2048: GameSession {
         if !hasWon, tiles.contains(where: { $0.value >= Self.goal && !$0.isMerging }) {
             hasWon = true
             state = .won
+            GameStats.won("2048")
         } else if !canMove() {
             state = .over
         }
@@ -208,13 +210,14 @@ struct Game2048View: View {
     let game: Game2048
     @Environment(SettingsStore.self) private var settings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.boardScale) private var scale
 
-    private static let cell: CGFloat = 70
-    private static let gap: CGFloat = 8
-    private static var side: CGFloat { CGFloat(Game2048.size) * cell + CGFloat(Game2048.size + 1) * gap }
+    private var cell: CGFloat { (70 * scale).rounded(.down) }
+    private var gap: CGFloat { (8 * scale).rounded() }
+    private var side: CGFloat { CGFloat(Game2048.size) * cell + CGFloat(Game2048.size + 1) * gap }
 
     var body: some View {
-        let accent = settings.accent.color
+        let accent = settings.accentColor
         // Merging tiles go underneath the tile they merge into.
         let tiles = game.tiles.sorted { $0.isMerging && !$1.isMerging }
 
@@ -224,19 +227,19 @@ struct Game2048View: View {
                 ForEach(0..<Game2048.size * Game2048.size, id: \.self) { i in
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(Tokens.fillHover)
-                        .frame(width: Self.cell, height: Self.cell)
-                        .position(Self.center(row: i / Game2048.size, col: i % Game2048.size))
+                        .frame(width: cell, height: cell)
+                        .position(center(row: i / Game2048.size, col: i % Game2048.size))
                 }
                 ForEach(tiles) { tile in
-                    TileView(value: tile.value, accent: accent, size: Self.cell, pops: !reduceMotion)
-                        .position(Self.center(row: tile.row, col: tile.col))
+                    TileView(value: tile.value, accent: accent, size: cell, pops: !reduceMotion)
+                        .position(center(row: tile.row, col: tile.col))
                         .transition(.asymmetric(
                             insertion: reduceMotion ? .opacity : .scale(scale: 0.2).combined(with: .opacity)
                                 .animation(.easeOut(duration: 0.12).delay(0.09)),
                             removal: .identity))
                 }
             }
-            .frame(width: Self.side, height: Self.side)
+            .frame(width: side, height: side)
             .animation(reduceMotion ? nil : .easeOut(duration: 0.11), value: game.tiles)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 20).onEnded { value in
@@ -246,12 +249,12 @@ struct Game2048View: View {
             .accessibilityElement()
             .accessibilityLabel(accessibilityDescription)
 
-            overlay.frame(width: Self.side, height: Self.side)
+            overlay.frame(width: side, height: side)
         }
         .animation(.easeOut(duration: 0.2), value: game.state)
     }
 
-    private static func center(row: Int, col: Int) -> CGPoint {
+    private func center(row: Int, col: Int) -> CGPoint {
         CGPoint(x: gap + CGFloat(col) * (cell + gap) + cell / 2, y: gap + CGFloat(row) * (cell + gap) + cell / 2)
     }
 
@@ -294,7 +297,7 @@ private struct TileView: View {
         let digits = String(value).count
 
         Text(verbatim: String(value))
-            .font(.system(size: digits <= 2 ? 30 : digits == 3 ? 26 : digits == 4 ? 22 : 18, weight: .bold).monospacedDigit())
+            .font(.system(size: (digits <= 2 ? 30 : digits == 3 ? 26 : digits == 4 ? 22 : 18) * size / 70, weight: .bold).monospacedDigit())
             .foregroundStyle(isHuge ? Color(nsColor: .windowBackgroundColor) : level <= 5 ? Color.primary : Color.white)
             .frame(width: size, height: size)
             .background(

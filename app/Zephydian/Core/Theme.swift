@@ -3,13 +3,17 @@ import SwiftUI
 
 /// Accent color themes. Each has a light-mode and a dark-mode variant.
 nonisolated enum AccentTheme: String, CaseIterable, Identifiable {
+    /// Follows System Settings → Appearance → Accent color, live. With macOS's "Multicolor"
+    /// (each app uses its own color) it shows Sky, Zephydian's own color.
+    case system
     case sky, mint, sunset, grape, rose, graphite
 
     var id: Self { self }
-    var name: String { rawValue.capitalized }
+    var name: String { self == .system ? "System (follows your Mac)" : rawValue.capitalized }
 
     private var hex: (light: UInt32, dark: UInt32) {
         switch self {
+        case .system: (0x1EA1F2, 0x1673D9)    // not used: System is drawn from macOS's accent
         case .sky: (0x1EA1F2, 0x1673D9)       // custom: bright sky blue in light, deeper blue in dark
         case .mint: (0x00C7BE, 0x63E6E2)
         case .sunset: (0xFF9500, 0xFF9F0A)
@@ -21,6 +25,17 @@ nonisolated enum AccentTheme: String, CaseIterable, Identifiable {
 
     /// Resolves to the light or dark variant automatically.
     var nsColor: NSColor {
+        if self == .system {
+            // A new name each time macOS's accent changes, so views see a different color and redraw.
+            return NSColor(name: "Zephydian.system.\(SystemAccent.revision)") { appearance in
+                if SystemAccent.isMulticolor { return AccentTheme.sky.nsColor }
+                var color = NSColor.controlAccentColor
+                appearance.performAsCurrentDrawingAppearance {
+                    color = NSColor.controlAccentColor.usingColorSpace(.sRGB) ?? .controlAccentColor
+                }
+                return color
+            }
+        }
         let (light, dark) = hex
         return NSColor(name: "Zephydian.\(rawValue)") { appearance in
             appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(hex: dark) : NSColor(hex: light)
@@ -28,6 +43,26 @@ nonisolated enum AccentTheme: String, CaseIterable, Identifiable {
     }
 
     var color: Color { Color(nsColor: nsColor) }
+}
+
+/// macOS's accent color, for the System accent theme.
+nonisolated enum SystemAccent {
+    /// Bumped (on the main thread) when macOS's accent color changes.
+    nonisolated(unsafe) static var revision = 0
+
+    /// "Multicolor" in System Settings: no accent color is saved.
+    static var isMulticolor: Bool { UserDefaults.standard.object(forKey: "AppleAccentColor") == nil }
+}
+
+extension SettingsStore {
+    /// The accent color in use. Read this (not `accent.color`) so views also redraw when the
+    /// accent is System and macOS's accent color changes.
+    var accentNSColor: NSColor {
+        _ = systemAccentRevision
+        return accent.nsColor
+    }
+
+    var accentColor: Color { Color(nsColor: accentNSColor) }
 }
 
 nonisolated extension Color {
@@ -91,7 +126,10 @@ extension MenuBarIcon {
 
 /// Shared design tokens.
 enum Tokens {
-    static let panelSize = NSSize(width: 380, height: 540)
+    /// The Medium panel, which every screen was designed at. Game boards scale from it (`boardScale`).
+    static let basePanelSize = PanelSize.medium.size
+    /// A game screen's header (44) and hint line (30), which don't scale.
+    static let gameChromeHeight: CGFloat = 74
     static let cardRadius: CGFloat = 12
     static let edgeInset: CGFloat = 8
     static let fill = Color(nsColor: .quaternarySystemFill)
@@ -100,4 +138,17 @@ enum Tokens {
     static let iconButtonSize: CGFloat = 28
     /// Glass cards floating over a game (pause, win, lose).
     static let overlayRadius: CGFloat = 18
+}
+
+private struct BoardScaleKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 1
+}
+
+extension EnvironmentValues {
+    /// How much bigger (or smaller) game boards are drawn than at the Medium panel size.
+    /// Follows the panel's real size, so it also shrinks when a short screen makes the panel shorter.
+    var boardScale: CGFloat {
+        get { self[BoardScaleKey.self] }
+        set { self[BoardScaleKey.self] = newValue }
+    }
 }

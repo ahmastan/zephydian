@@ -19,12 +19,12 @@
 ## Features
 
 - **Corner hover to open.** Pick any of the four screen corners. The panel appears when you hover and disappears when you're done.
-- **Quick Notes.** Tabbed notes that autosave as plain Markdown files you can open anywhere.
+- **Quick Notes.** Tabbed notes that autosave as plain Markdown files you can open anywhere. Open them in their own window that stays on top of other apps, drag a single note out of it to pin it anywhere on screen, preview notes formatted (tick checkboxes right in them), search every note, and export them.
 - **Utilities you choose.** Add the ones you want from the **Library**: Clipboard (a private history of what you copy), Screenshot, Markup (crop, annotate and pixelate screenshots or any image), Dictionary (definitions and synonyms from your Mac's own dictionary, offline), Passwords, Colors (pick any color on screen), Timer, Calculator, Text tools, QR Code, Awake (keep your Mac awake) and System (CPU, memory, disk, battery and network). None come preinstalled, and more utilities are coming soon.
-- **Games you choose.** Snake, Stackr (block stacking) and Five (5-letter word guess) come installed. Spokes (letter-wheel crosswords), Fleet (sea battle), Airship (top-down shooter), 2048 (slide and merge numbers), Mines (clear the minefield), Nines (number-placement puzzles) and Switch (turn every light off) are a click away in the **Library**, with more games on the way. Remove any game you don't play.
-- **Make it yours.** Light, dark, or system appearance, accent color themes, Liquid Glass or frosted panel (macOS 26+), and a choice of menu bar icon (or none at all).
+- **Games you choose.** Snake, Stackr (block stacking) and Five (5-letter word guess) come installed. Spokes (letter-wheel crosswords), Fleet (sea battle), Airship (top-down shooter), 2048 (slide and merge numbers), Mines (clear the minefield), Nines (number-placement puzzles) and Switch (turn every light off) are a click away in the **Library**, with more games on the way. Remove any game you don't play. A **Stats** screen shows your games played, wins, best scores and streaks.
+- **Make it yours.** Light, dark, or system appearance, accent color themes (or your Mac's own accent color, followed live), a small, medium or large panel, Liquid Glass or frosted panel (macOS 26+), and a choice of menu bar icon (or none at all).
 - **Keyboard shortcuts you pick.** Record any key combination to open the panel (and for Clipboard, Screenshot and Dictionary). Zephydian tells you if something else on your Mac already uses it.
-- **Featherweight.** Native Swift and SwiftUI. ~7 MB app, ~30 MB memory, and ~0.1% CPU when idle. Games pause the moment the panel hides.
+- **Featherweight.** Native Swift and SwiftUI. ~9 MB app (a 5 MB download), ~30 MB memory, and ~0.1% CPU when idle. Games pause the moment the panel hides.
 - **Private.** No accounts and no tracking. Zephydian goes online only to download games and utilities you pick from the Library, and about once a day to update them (you can turn that off). Nothing about you is sent. Utilities keep their data on your Mac.
 
 ## Install
@@ -60,7 +60,7 @@ You only need to do this once per version.
 
 ## The Library
 
-Open **Get more** at the end of the Games or Utilities grid to add or remove games and utilities. Built-in games install instantly. Everything else arrives as small **packs**: JavaScript programs that Zephydian runs in a locked-down sandbox and draws natively, so they look and feel like the rest of the app.
+Click **Get more** above the Games or Utilities grid to add or remove games and utilities. Built-in games install instantly. Everything else arrives as small **packs**: JavaScript programs that Zephydian runs in a locked-down sandbox and draws natively, so they look and feel like the rest of the app.
 
 - **Safe by design.** A game can only draw on its game area, react to keys and clicks, and save its own progress. No pack has internet access.
 - **You see what a utility uses.** A utility that needs more (the clipboard, screenshots, notifications, keeping the Mac awake, a keyboard shortcut) lists it under **Uses** in the Library, and Zephydian asks you before installing it. It can't use anything it didn't list. Screenshots also need macOS's own Screen Recording permission, a utility can save a file only where you choose, Markup opens only images you pick, paste or capture, and Dictionary reads what you copied only while it's on screen.

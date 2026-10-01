@@ -145,6 +145,7 @@ final class FiveGame: GameSession {
         guard valid.contains(current) else { reject("Not in word list"); return }
 
         let guess = current
+        if guesses.isEmpty { GameStats.started("five") }   // the first guess starts a word
         guesses.append(guess)
         current = ""
         saveDaily()
@@ -296,6 +297,7 @@ final class FiveGame: GameSession {
     }
 
     private func record(won: Bool) {
+        if won { GameStats.won("five") }   // daily and practice words both count in Stats
         guard mode == .daily, stats.lastPlayed != today else { return }
         let yesterday = Self.dayKey(Calendar.current.date(byAdding: .day, value: -1, to: .now)!)
         stats.played += 1

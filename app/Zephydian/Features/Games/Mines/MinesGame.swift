@@ -121,6 +121,7 @@ final class MinesGame: GameSession {
             placeMines(avoiding: cell)
             state = .playing
             loop.start()
+            GameStats.started("mines")   // the first click starts the game
         }
         if revealed.contains(cell) {
             let around = neighbors(of: cell)
@@ -176,6 +177,7 @@ final class MinesGame: GameSession {
         loop.stop()
         flagged = mines
         isNewBest = BestTime.record(seconds, for: difficulty.bestKey)
+        GameStats.won("mines")
     }
 
     static var tileStat: String {

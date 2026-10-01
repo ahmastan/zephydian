@@ -34,7 +34,7 @@ struct PackFitCanvas: View {
 
     var body: some View {
         // Read the state here (not inside Canvas) so SwiftUI redraws when it changes.
-        let accent = settings.accent.color
+        let accent = settings.accentColor
         let shapes = canvas.shapes, fit = canvas.fit ?? CGSize(width: 1, height: 1), ink = canvas.ink, live = live
         GeometryReader { proxy in
             let layout = FitLayout(content: fit, in: proxy.size)

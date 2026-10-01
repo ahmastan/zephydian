@@ -136,6 +136,7 @@ final class FleetGame: GameSession {
     func startBattle() {
         guard phase == .placing else { return }
         phase = .battle
+        GameStats.started("fleet")
         show("Your turn: fire at the enemy's waters")
     }
 
@@ -187,6 +188,7 @@ final class FleetGame: GameSession {
         phase = won ? .won : .lost
         isPlayerTurn = false
         if won {
+            GameStats.won("fleet")
             wins += 1
             UserDefaults.standard.set(wins, forKey: "fleet.wins")
         }

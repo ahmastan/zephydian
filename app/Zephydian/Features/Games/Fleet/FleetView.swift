@@ -3,6 +3,7 @@ import SwiftUI
 struct FleetView: View {
     let game: FleetGame
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.boardScale) private var scale
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -39,7 +40,7 @@ struct FleetView: View {
                 Text("Place your fleet").font(.system(size: 15, weight: .semibold))
                 Text("Drag a ship to move it · click it to rotate").font(.system(size: 11)).foregroundStyle(.secondary)
             }
-            PlacementBoard(game: game, accent: settings.accent.color)
+            PlacementBoard(game: game, accent: settings.accentColor)
             HStack(spacing: 8) {
                 Button { game.shufflePlayerFleet() } label: { Label("Shuffle", systemImage: "shuffle") }
                 Button("Start battle") { game.startBattle() }.prominentButtonStyle()
@@ -58,14 +59,14 @@ struct FleetView: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(game.isPlayerTurn ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
             }
-            .frame(width: 260)
+            .frame(width: (26 * scale).rounded(.down) * CGFloat(FleetGame.size))
 
-            TargetBoard(game: game, accent: settings.accent.color)
+            TargetBoard(game: game, accent: settings.accentColor)
 
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("YOUR FLEET").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
-                    OwnBoard(game: game, accent: settings.accent.color)
+                    OwnBoard(game: game, accent: settings.accentColor)
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     Text("ENEMY SHIPS").font(.system(size: 10, weight: .semibold)).foregroundStyle(.secondary)
@@ -88,7 +89,8 @@ struct FleetView: View {
                 }
                 .frame(width: 124)
             }
-            .frame(width: 260)
+            // The fleet list is text, which keeps its size, so this row doesn't shrink below it.
+            .frame(width: max((26 * scale).rounded(.down) * CGFloat(FleetGame.size), 256))
         }
     }
 }
@@ -146,8 +148,9 @@ private struct PlacementBoard: View {
     let game: FleetGame
     let accent: Color
     @State private var dragging: (id: Int, offset: CGSize, grabCell: FleetGame.Cell)?
+    @Environment(\.boardScale) private var scale
 
-    private let cell: CGFloat = 28
+    private var cell: CGFloat { (28 * scale).rounded(.down) }
 
     var body: some View {
         let ships = game.playerShips
@@ -195,8 +198,9 @@ private struct TargetBoard: View {
     let game: FleetGame
     let accent: Color
     @State private var hovered: FleetGame.Cell?
+    @Environment(\.boardScale) private var scale
 
-    private let cell: CGFloat = 26
+    private var cell: CGFloat { (26 * scale).rounded(.down) }
 
     var body: some View {
         let shots = game.playerShots
@@ -238,8 +242,9 @@ private struct TargetBoard: View {
 private struct OwnBoard: View {
     let game: FleetGame
     let accent: Color
+    @Environment(\.boardScale) private var scale
 
-    private let cell: CGFloat = 12
+    private var cell: CGFloat { (12 * scale).rounded(.down) }
 
     var body: some View {
         let ships = game.playerShips
