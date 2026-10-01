@@ -199,6 +199,7 @@ final class NinesGame: GameSession {
             self.state = .playing
             self.loop.start()
             self.save()
+            GameStats.started("nines")
         }
     }
 
@@ -217,6 +218,7 @@ final class NinesGame: GameSession {
         loop.stop()
         isNewBest = BestTime.record(seconds, for: difficulty.bestKey)
         UserDefaults.standard.removeObject(forKey: Self.saveKey)
+        GameStats.won("nines")
     }
 
     // MARK: Saving

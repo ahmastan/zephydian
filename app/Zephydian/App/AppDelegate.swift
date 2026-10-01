@@ -11,6 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotKey = GlobalHotKey()
     private var registeredShortcut: KeyShortcut??
     private var panel: PanelController!
+    private var noteWindows: NoteWindows!
+    private var notesWindow: NotesWindowController!
     private var statusItem: StatusItemController!
     private var cornerTrigger: CornerTrigger!
     private let notificationPresenter = NotificationPresenter()
@@ -18,6 +20,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         notes.load()
         panel = PanelController(settings: settings, model: model, notes: notes)
+        noteWindows = NoteWindows(notes: notes, settings: settings)
+        noteWindows.start()   // pinned notes float again where they were left
+        notesWindow = NotesWindowController(settings: settings, model: model, notes: notes)
+        model.detachNotes = { [weak self] in self?.notesWindow.detach() }
+        model.showNotesWindow = { [weak self] in self?.notesWindow.show() }
+        model.attachNotes = { [weak self] in self?.notesWindow.attach() }
+        notesWindow.restore()   // Notes left in their own window open there again
+        noteWindows.onSearch = { [weak self] in
+            guard let self, !self.model.isOnboarding else { return }
+            if self.settings.notesDetached {
+                self.notesWindow.show()
+                self.model.isSearchingNotes = true
+                return
+            }
+            if self.model.isShowingGame { self.model.closeGame() }
+            self.model.closeLibrary()
+            self.model.tab = .notes
+            self.model.isSearchingNotes = true
+            self.panel.show()
+        }
         statusItem = StatusItemController()
         cornerTrigger = CornerTrigger(settings: settings) { [weak self] in
             guard let self, !self.model.isOnboarding else { return }
@@ -72,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.model.tab = .utilities
             self.model.openGame(id)
             self.panel.show()
+            (self.model.gameSession as? PackSession)?.shortcutPressed()
         }
         // A screenshot's Edit button opens the installed image editor (Markup) in its own window.
         services.imageEditor = { PackLibrary.shared.packs.first(where: \.isImageEditor)?.id }
@@ -92,6 +115,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         applySettings()
         observeSettings()
+        // The System accent follows macOS's accent color as soon as it changes.
+        NotificationCenter.default.addObserver(forName: NSColor.systemColorsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.settings.systemAccentDidChange() }
+        }
 
         if !settings.hasCompletedOnboarding {
             panel.showOnboarding()
@@ -119,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func applySettings() {
         statusItem.apply(icon: settings.menuBarIcon)
-        statusItem.setServiceActive(PackServices.shared.colorsJet, color: settings.accent.nsColor)
+        statusItem.setServiceActive(PackServices.shared.colorsJet, color: settings.accentNSColor)
         cornerTrigger.reposition()
         panel.applyAppearance()
         PackServices.shared.windows.applyAppearance(settings.appearance.nsAppearance)
@@ -139,8 +166,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = settings.corner
             _ = settings.displayName
             _ = settings.panelStyle
+            _ = settings.panelSize
             _ = settings.panelShortcut
             _ = settings.accent
+            _ = settings.systemAccentRevision
             _ = PackServices.shared.colorsJet
         } onChange: { [weak self] in
             Task { @MainActor in

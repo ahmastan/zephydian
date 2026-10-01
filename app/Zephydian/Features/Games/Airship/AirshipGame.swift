@@ -141,6 +141,7 @@ final class AirshipGame: GameSession {
     func start() {
         guard state != .running else { return }
         if state == .over { reset() }
+        if state == .ready { GameStats.started("airship") }   // a new game, not a resume
         state = .running
         lastTick = nil
         loop.start()
@@ -169,6 +170,7 @@ final class AirshipGame: GameSession {
         state = .over
         loop.stop()
         releaseInput()
+        GameStats.finished("airship", score: world.score)
         if world.score > best {
             best = world.score
             isNewBest = true

@@ -3,15 +3,16 @@ import SwiftUI
 struct NinesView: View {
     let game: NinesGame
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.boardScale) private var scale
 
-    private static let cell: CGFloat = 34
-    private static let side = cell * 9
+    private var cell: CGFloat { (34 * scale).rounded(.down) }
+    private var side: CGFloat { cell * 9 }
 
     var body: some View {
         VStack(spacing: 10) {
             ZStack {
                 grid
-                overlay.frame(width: Self.side, height: Self.side)
+                overlay.frame(width: side, height: side)
             }
             tools
             digitPad
@@ -23,7 +24,7 @@ struct NinesView: View {
 
     private var grid: some View {
         // Read the state here (not inside Canvas) so SwiftUI redraws when it changes.
-        let accent = settings.accent.color
+        let accent = settings.accentColor
         let values = (0..<81).map { game.value(at: $0) }
         let givens = game.puzzle?.givens ?? Array(repeating: 0, count: 81)
         let notes = game.notes
@@ -32,7 +33,7 @@ struct NinesView: View {
         let showSelection = game.state == .playing
         let hidden = game.state != .playing && game.state != .won // no peeking while paused
         let selectedValue = values[selected]
-        let cell = Self.cell
+        let cell = cell
 
         return Canvas { context, size in
             context.fill(Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 8), with: .color(Tokens.fill))
@@ -49,7 +50,7 @@ struct NinesView: View {
                     let center = CGPoint(x: rect.midX, y: rect.midY)
                     if values[i] != 0 {
                         let color: Color = conflicts.contains(i) && givens[i] == 0 ? .red : givens[i] != 0 ? .primary : accent
-                        let text = Text("\(values[i])").font(.system(size: 19, weight: givens[i] != 0 ? .semibold : .regular))
+                        let text = Text("\(values[i])").font(.system(size: 19 * cell / 34, weight: givens[i] != 0 ? .semibold : .regular))
                         context.draw(text.foregroundStyle(color), at: center)
                         if conflicts.contains(i) && givens[i] != 0 {
                             context.fill(Path(ellipseIn: CGRect(x: rect.maxX - 8, y: rect.minY + 4, width: 4, height: 4)), with: .color(.red))
@@ -58,7 +59,7 @@ struct NinesView: View {
                         for d in 1...9 where notes[i] & (1 << d) != 0 {
                             let p = CGPoint(x: rect.minX + (CGFloat((d - 1) % 3) + 0.5) * cell / 3,
                                             y: rect.minY + (CGFloat((d - 1) / 3) + 0.5) * cell / 3)
-                            context.draw(Text("\(d)").font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary), at: p)
+                            context.draw(Text("\(d)").font(.system(size: max(8, 9 * cell / 34), weight: .medium)).foregroundStyle(.secondary), at: p)
                         }
                     }
                 }
@@ -75,7 +76,7 @@ struct NinesView: View {
             context.stroke(thin, with: .color(.secondary.opacity(0.25)), lineWidth: 0.5)
             context.stroke(thick, with: .color(.secondary.opacity(0.6)), lineWidth: 1.5)
         }
-        .frame(width: Self.side, height: Self.side)
+        .frame(width: side, height: side)
         .contentShape(Rectangle())
         .onTapGesture { location in
             let x = Int(location.x / cell), y = Int(location.y / cell)
@@ -116,7 +117,7 @@ struct NinesView: View {
                 Button { game.enter(d) } label: {
                     Text("\(d)")
                         .font(.system(size: 18, weight: .medium))
-                        .frame(width: 30, height: 36)
+                        .frame(width: (30 * scale).rounded(), height: (36 * scale).rounded())
                         .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Tokens.fill))
                         .contentShape(Rectangle())
                 }

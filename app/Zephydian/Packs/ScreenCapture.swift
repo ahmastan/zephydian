@@ -228,7 +228,7 @@ final class ScreenCapture {
     // MARK: Picking
 
     /// The person's accent color (the crosshair, the selection and window highlight use it).
-    private var accent: NSColor { services.settings?.accent.nsColor ?? .controlAccentColor }
+    private var accent: NSColor { services.settings?.accentNSColor ?? .controlAccentColor }
 
     private func pickArea() async -> CGRect? {
         await withCheckedContinuation { continuation in

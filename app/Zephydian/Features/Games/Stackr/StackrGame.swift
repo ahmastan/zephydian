@@ -113,6 +113,7 @@ final class StackrGame: GameSession {
     func start() {
         guard state != .running else { return }
         if state == .over { reset() }
+        if state == .ready { GameStats.started("stackr") }   // a new game, not a resume
         if current == nil {
             spawn()
             guard state != .over else { return }
@@ -305,6 +306,7 @@ final class StackrGame: GameSession {
         state = .over
         loop.stop()
         updateBest()
+        GameStats.finished("stackr", score: score)
     }
 
     private func updateBest() {

@@ -55,6 +55,8 @@ New games and utilities are **packs**: small JavaScript programs that people ins
 
 Packs follow the same rules as the rest of the app: an original single-word name for games, only the capabilities a utility really needs, keyboard support where it makes sense, readable in light and dark mode, and no work while the game isn't on screen (the SDK's loop already stops when the panel hides).
 
+**If your pack needs something the SDK can't do yet** (a new capability, control or native helper), that part goes into the app in Swift. Add it in `app/Zephydian/Packs/`, raise the SDK version in `PackBundle.swift` and `scripts/packs.swift`, document it in `docs/PACKS.md` under its SDK version, and set your pack's `sdkVersion` to match. Older apps then show the pack as "Update Zephydian to install this" instead of installing something they can't run. A new capability must be listed in `PackCapabilities.swift` with a plain sentence that the Library shows before install, and it must be refused when the manifest doesn't declare it. The windows and image editing in SDK 3 (Markup), and the dictionary and copied-text capabilities in SDK 4 (Dictionary), are examples.
+
 ## Working on the built-in games
 
 The built-in games (Snake, Stackr, Five and the others) live in `app/Zephydian/Features/Games/`. Each is an `@Observable` class conforming to `GameSession` in `Game.swift`, registered in `GameRegistry.builtIn`.
@@ -62,6 +64,8 @@ The built-in games (Snake, Stackr, Five and the others) live in `app/Zephydian/F
 - Real-time games must use the shared `GameLoop` and stop it in `pause()`. The app calls `pause()` whenever the panel hides or you leave the game. **Never** start your own always-running `Timer`.
 - Turn-based games shouldn't use a loop at all. A game clock (like in Mines and Nines) is fine: run it with `GameLoop` only while the game is being played.
 - Keep every registry `id` and saved key unchanged, so players keep their progress.
+- The panel comes in three sizes. Boards scale with it: multiply fixed sizes (cells, keys) by the `boardScale` environment value, and keep text at its normal size.
+- Record stats where a game starts, is won and (for scored games) ends, with `GameStats.started`, `won` and `finished`, so the Stats screen counts it.
 
 ## Pull requests
 

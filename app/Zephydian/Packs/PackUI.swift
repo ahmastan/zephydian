@@ -6,7 +6,7 @@ import SwiftUI
 /// One control or container from a utility's `view()` (SDK 2), already checked. The app draws it
 /// with native SwiftUI controls, so utilities type, select, copy and read out like any Mac app.
 nonisolated struct PackUINode: Equatable, Identifiable {
-    enum TextStyle: String { case body, title, large, secondary, caption, mono }
+    enum TextStyle: String { case body, title, large, display, secondary, caption, mono }
 
     struct ListItem: Equatable, Identifiable {
         struct Action: Equatable { var symbol: String; var label: String }
@@ -21,7 +21,7 @@ nonisolated struct PackUINode: Equatable, Identifiable {
     }
 
     enum Kind: Equatable {
-        case text(String, style: TextStyle, align: PackShape.Align, selectable: Bool, color: PackColor?)
+        case text(String, style: TextStyle, align: PackShape.Align, selectable: Bool, color: PackColor?, italic: Bool)
         case field(value: String, placeholder: String, multiline: Bool, lines: Int, mono: Bool)
         /// `badge`: a small letter in a toolbar button's corner (its key). `bar`: a line-weight glyph
         /// of that thickness instead of a symbol.
@@ -40,6 +40,8 @@ nonisolated struct PackUINode: Equatable, Identifiable {
         case copy(text: String, label: String, concealed: Bool)
         /// `fill`: a row that takes the height it's given (a tool rail beside a fit canvas), aligned to the top.
         case stack(vertical: Bool, spacing: Double, align: PackShape.Align, fill: Bool)
+        /// A row that wraps onto more lines when its children don't fit (SDK 4), like tags.
+        case flow(spacing: Double)
         case section(title: String?)
         case list(items: [ListItem], selected: String?, empty: String?)
         case canvas(PackCanvas)
@@ -91,7 +93,7 @@ nonisolated struct PackUINode: Equatable, Identifiable {
         switch s("t") {
         case "text":
             kind = .text(s("text") ?? "", style: TextStyle(rawValue: s("style") ?? "") ?? .body, align: align,
-                         selectable: b("selectable"), color: s("color").flatMap(PackColor.init))
+                         selectable: b("selectable"), color: s("color").flatMap(PackColor.init), italic: b("italic"))
         case "field":
             kind = .field(value: s("value") ?? "", placeholder: s("placeholder") ?? "", multiline: b("multiline"),
                           lines: Int(min(max(d("lines", 4), 1), 30)), mono: b("mono"))
@@ -119,6 +121,8 @@ nonisolated struct PackUINode: Equatable, Identifiable {
             kind = .copy(text: s("text") ?? "", label: s("label") ?? "Copy", concealed: b("concealed"))
         case "row", "column":
             kind = .stack(vertical: s("t") == "column", spacing: min(max(d("spacing", 8), 0), 64), align: align, fill: b("fill"))
+        case "flow":
+            kind = .flow(spacing: min(max(d("spacing", 6), 0), 32))
         case "section":
             kind = .section(title: s("title"))
         case "list":
@@ -233,13 +237,13 @@ struct UtilityView: View {
             }
             .onAppear {
                 session.resume()        // utilities carry on as soon as they're on screen again
-                session.updateTheme(dark: colorScheme == .dark, accent: settings.accent.nsColor)
+                session.updateTheme(dark: colorScheme == .dark, accent: settings.accentNSColor)
                 session.setSize(CGSize(width: max(1, proxy.size.width - 32), height: proxy.size.height))
             }
             .onChange(of: proxy.size) { _, size in session.setSize(CGSize(width: max(1, size.width - 32), height: size.height)) }
         }
-        .onChange(of: colorScheme) { _, scheme in session.updateTheme(dark: scheme == .dark, accent: settings.accent.nsColor) }
-        .onChange(of: settings.accent) { _, accent in session.updateTheme(dark: colorScheme == .dark, accent: accent.nsColor) }
+        .onChange(of: colorScheme) { _, scheme in session.updateTheme(dark: scheme == .dark, accent: settings.accentNSColor) }
+        .onChange(of: settings.accentNSColor) { _, accent in session.updateTheme(dark: colorScheme == .dark, accent: accent) }
         // A service stopped from Settings (or timed out) changes what the utility shows.
         .onChange(of: services.running) { session.refresh() }
         .onChange(of: services.revision) { session.refresh() }
@@ -263,10 +267,11 @@ private struct PackNodeView: View {
 
     var body: some View {
         switch node.kind {
-        case let .text(string, style, align, selectable, color):
+        case let .text(string, style, align, selectable, color, italic):
             let text = Text(string)
                 .font(Self.font(style))
-                .foregroundStyle(color.map { AnyShapeStyle(PackView.color($0, accent: settings.accent.color)) }
+                .italic(italic)
+                .foregroundStyle(color.map { AnyShapeStyle(PackView.color($0, accent: settings.accentColor)) }
                                  ?? (style == .secondary || style == .caption ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary)))
                 .multilineTextAlignment(align == .center ? .center : align == .right ? .trailing : .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -309,6 +314,28 @@ private struct PackNodeView: View {
                 }
             }
             .frame(maxWidth: .infinity)
+
+        case let .button(label, .some(symbol), "icon", disabled, _, _, _):
+            // Just the symbol (SDK 4); the label is its tooltip and what VoiceOver reads.
+            Button { send("onPress") } label: { Image(systemName: symbol) }
+                .buttonStyle(.borderless)
+                .help(label)
+                .accessibilityLabel(label)
+                .disabled(disabled)
+
+        case let .button(label, _, "chip", disabled, selected, _, _):
+            // A word or tag in a flow (content, so a plain fill rather than glass). `selected` stands out.
+            Button { send("onPress") } label: {
+                Text(label)
+                    .font(.system(size: 12, weight: selected ? .semibold : .regular))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(selected ? AnyShapeStyle(.tint.opacity(0.18)) : AnyShapeStyle(Tokens.fill)))
+                    .foregroundStyle(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.primary))
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(disabled)
 
         case let .button(label, symbol, style, disabled, _, _, _):
             let button = Button(role: style == "destructive" ? .destructive : nil) { send("onPress") } label: {
@@ -380,6 +407,10 @@ private struct PackNodeView: View {
                     .frame(maxWidth: .infinity, alignment: align == .center ? .center : align == .right ? .trailing : .leading)
             }
 
+        case let .flow(spacing):
+            FlowLayout(spacing: spacing) { children }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
         case let .section(title):
             // Content, like the Settings sections: a plain fill card, no glass.
             VStack(alignment: .leading, spacing: 6) {
@@ -404,7 +435,7 @@ private struct PackNodeView: View {
                 .id(node.id)
 
         case let .canvas(canvas):
-            let accent = settings.accent.color
+            let accent = settings.accentColor
             Canvas { context, size in
                 PackView.render(canvas.shapes, in: context, size: size, accent: accent, image: session.image(named:))
             }
@@ -439,7 +470,7 @@ private struct PackNodeView: View {
         case let .swatch(color, size, selected, pressable, true):
             // A color dot: the color in a circle, with a ring around the chosen one.
             let dot = ZStack {
-                Circle().fill(PackView.color(color, accent: settings.accent.color))
+                Circle().fill(PackView.color(color, accent: settings.accentColor))
                     .overlay(Circle().strokeBorder(Color.primary.opacity(0.22), lineWidth: 0.5))
                     .frame(width: size, height: size)
                 if selected { Circle().strokeBorder(Color.primary.opacity(0.9), lineWidth: 1.5).frame(width: size + 6, height: size + 6) }
@@ -459,7 +490,7 @@ private struct PackNodeView: View {
         case let .swatch(color, size, selected, pressable, _):
             let shape = RoundedRectangle(cornerRadius: min(8, size / 4), style: .continuous)
             let swatch = shape
-                .fill(PackView.color(color, accent: settings.accent.color))
+                .fill(PackView.color(color, accent: settings.accentColor))
                 .overlay(shape.strokeBorder(.separator))
                 .overlay(shape.inset(by: -3).strokeBorder(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear), lineWidth: 2))
                 .frame(width: size, height: size)
@@ -509,10 +540,48 @@ private struct PackNodeView: View {
         case .body: .system(size: 13)
         case .title: .system(size: 15, weight: .semibold)
         case .large: .system(size: 28, weight: .semibold).monospacedDigit()
+        case .display: .system(size: 26, weight: .semibold, design: .serif)
         case .secondary: .system(size: 12)
         case .caption: .system(size: 11)
         case .mono: .system(size: 13, design: .monospaced)
         }
+    }
+}
+
+/// Lays its children out in rows, starting a new row when the next one doesn't fit.
+private struct FlowLayout: Layout {
+    var spacing: Double
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(subviews, width: proposal.width ?? .infinity)
+        return CGSize(width: rows.width, height: rows.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let rows = arrange(subviews, width: bounds.width)
+        for (index, frame) in rows.frames.enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                                  proposal: ProposedViewSize(frame.size))
+        }
+    }
+
+    private func arrange(_ subviews: Subviews, width: CGFloat) -> (frames: [CGRect], width: CGFloat, height: CGFloat) {
+        var frames: [CGRect] = []
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, widest: CGFloat = 0
+        for view in subviews {
+            var size = view.sizeThatFits(.unspecified)
+            size.width = min(size.width, width)
+            if x > 0 && x + size.width > width {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            frames.append(CGRect(origin: CGPoint(x: x, y: y), size: size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+            widest = max(widest, x - spacing)
+        }
+        return (frames, widest, y + rowHeight)
     }
 }
 
@@ -713,14 +782,14 @@ struct PackWindowView: View {
                 }
             }
             .onAppear {
-                session.updateTheme(dark: colorScheme == .dark, accent: settings.accent.nsColor)
+                session.updateTheme(dark: colorScheme == .dark, accent: settings.accentNSColor)
                 session.setSize(proxy.size)
             }
             .onChange(of: proxy.size) { _, size in session.setSize(size) }
         }
-        .tint(settings.accent.color)
-        .onChange(of: colorScheme) { _, scheme in session.updateTheme(dark: scheme == .dark, accent: settings.accent.nsColor) }
-        .onChange(of: settings.accent) { _, accent in session.updateTheme(dark: colorScheme == .dark, accent: accent.nsColor) }
+        .tint(settings.accentColor)
+        .onChange(of: colorScheme) { _, scheme in session.updateTheme(dark: scheme == .dark, accent: settings.accentNSColor) }
+        .onChange(of: settings.accentNSColor) { _, accent in session.updateTheme(dark: colorScheme == .dark, accent: accent) }
         .animation(.easeOut(duration: 0.2), value: session.toast)
     }
 }

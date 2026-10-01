@@ -103,7 +103,7 @@ struct CornerPicker: View {
     @ViewBuilder private func dotView(selected: Bool) -> some View {
         if selected, settings.usesGlass {
             Circle().fill(.clear)
-                .glassSurface(in: Circle(), tint: settings.accent.color, fallback: .tint)
+                .glassSurface(in: Circle(), tint: settings.accentColor, fallback: .tint)
         } else {
             Circle()
                 .fill(selected ? AnyShapeStyle(.tint) : AnyShapeStyle(.white.opacity(colorScheme == .dark ? 0.2 : 0.6)))

@@ -4,15 +4,17 @@ import SwiftUI
 struct MinesView: View {
     let game: MinesGame
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.boardScale) private var scale
     @State private var hovered: MinesGame.Cell?
 
     /// Cell size per difficulty, so every board fits the panel.
     private var cell: CGFloat {
-        switch game.difficulty {
+        let medium: CGFloat = switch game.difficulty {
         case .easy: 34
         case .medium: 26
         case .hard: 23
         }
+        return (medium * scale).rounded(.down)
     }
 
     var body: some View {
@@ -59,7 +61,7 @@ struct MinesView: View {
 
     private func board(cell: CGFloat) -> some View {
         // Read the state here (not inside Canvas) so SwiftUI redraws when it changes.
-        let accent = settings.accent.color
+        let accent = settings.accentColor
         let revealed = game.revealed
         let flagged = game.flagged
         let mines = game.mines

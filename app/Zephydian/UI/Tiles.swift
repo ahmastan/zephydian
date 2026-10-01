@@ -38,25 +38,44 @@ struct GameTile: View {
     }
 }
 
-/// The last tile of the Games and Utilities tabs: opens the Library, where more are installed.
-struct GetMoreTile: View {
-    let accessibilityLabel: String
-    let open: () -> Void
+/// The row above the Games and Utilities grids: how many there are, and glass buttons on the right
+/// (Stats, Get more). The buttons are the control layer; the tiles below stay content.
+struct GridToolbar<Buttons: View>: View {
+    let count: Int
+    let noun: String
+    var plural: String?
+    @ViewBuilder var buttons: () -> Buttons
 
     var body: some View {
-        Button(action: open) {
-            VStack(spacing: 3) {
-                GameIconView(icon: .symbol("plus"))
-                    .padding(.bottom, 6)
-                Text("Get more").font(.system(size: 12, weight: .medium))
-                Text("Library").font(.system(size: 11)).foregroundStyle(.secondary)
+        HStack(spacing: 8) {
+            Text(count == 1 ? "1 \(noun)" : "\(count) \(plural ?? noun + "s")")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            GlassGroup(spacing: 6) {
+                HStack(spacing: 6) { buttons() }
             }
-            .padding(.horizontal, 6)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .aspectRatio(1, contentMode: .fit)
         }
-        .buttonStyle(TileButtonStyle())
-        .accessibilityLabel(accessibilityLabel)
+        .padding(.horizontal, 16)
+    }
+}
+
+/// A small capsule button with an icon and a word, for `GridToolbar`.
+struct GridToolbarButton: View {
+    let title: String
+    let symbol: String
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: symbol)
+                .font(.system(size: 12, weight: .medium))
+                .labelStyle(.titleAndIcon)
+        }
+        .controlSize(.small)
+        .buttonBorderShape(.capsule)
+        .help(help)
     }
 }
 

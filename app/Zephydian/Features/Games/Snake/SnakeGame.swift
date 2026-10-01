@@ -80,6 +80,7 @@ final class SnakeGame: GameSession {
     func start() {
         guard state != .running else { return }
         if state == .over { reset() }
+        if state == .ready { GameStats.started("snake") }   // a new game, not a resume
         state = .running
         loop.start()
     }
@@ -136,6 +137,7 @@ final class SnakeGame: GameSession {
     private func endGame() {
         state = .over
         loop.stop()
+        GameStats.finished("snake", score: score)
     }
 }
 
@@ -144,6 +146,7 @@ final class SnakeGame: GameSession {
 struct SnakeView: View {
     let game: SnakeGame
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.boardScale) private var scale
 
     private static let cell: CGFloat = 17
 
@@ -151,8 +154,8 @@ struct SnakeView: View {
         // Read the state here (not inside Canvas) so SwiftUI redraws when it changes.
         let snake = game.snake
         let food = game.food
-        let accent = settings.accent.color
-        let cell = Self.cell
+        let accent = settings.accentColor
+        let cell = (Self.cell * scale).rounded(.down)
 
         ZStack {
             Canvas { context, size in

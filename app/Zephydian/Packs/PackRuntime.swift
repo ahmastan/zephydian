@@ -154,6 +154,8 @@ final class PackRuntime {
 
     // Loop and timers
     private var loopInterval: Int?       // ms the pack asked for; nil = loop off
+    /// The utility's shortcut was pressed before it had started: tell it right after `start`.
+    private var pendingShortcut = false
     private var ticker: Task<Void, Never>?
     private var timers: [Int: Task<Void, Never>] = [:]
     private var nextTimer = 1
@@ -209,6 +211,10 @@ final class PackRuntime {
         if !isStarted {
             isStarted = true
             call("start")
+            if pendingShortcut {
+                pendingShortcut = false
+                call("shortcut")
+            }
         }
         requestDraw()
     }
@@ -228,6 +234,10 @@ final class PackRuntime {
     func redo() -> Bool { call("redo")?.toBool() ?? false }
     /// A window's close button or ⌘W. False keeps it open (the pack may ask first, then close it).
     func shouldClose() -> Bool { call("shouldClose")?.toBool() ?? true }
+    /// The utility was opened with its own shortcut (SDK 4): its `shortcut()` runs.
+    func shortcut() {
+        if isStarted { call("shortcut") } else { pendingShortcut = true }
+    }
     func pressOverlayButton(_ index: Int) { call("overlayPress", index) }
     func selectMenuItem(_ index: Int) { call("menuSelect", index) }
 
@@ -605,6 +615,31 @@ final class PackRuntime {
                 return Self.jsonString(self.services.system.read())
             }
         } as @convention(block) () -> String)
+        // Words (dictionary, SDK 4): read on demand from the dictionary and thesaurus in macOS.
+        define("dictionary", { [weak self] (action: String, arg: String) -> String in
+            MainActor.assumeIsolated {
+                guard let self, allowed("dictionary") else { return "null" }
+                let words = self.services.dictionary
+                switch action {
+                case "define": return Self.jsonString(words.define(arg))
+                case "synonyms": return Self.jsonString(words.synonyms(arg))
+                case "suggest": return Self.jsonString(words.suggestions(String(arg.prefix(PackDictionary.maxWord))))
+                case "status": return Self.jsonString(words.status())
+                case "speak": words.speak(arg)
+                case "open": words.openInApp(arg)
+                default: break
+                }
+                return "null"
+            }
+        } as @convention(block) (String, String) -> String)
+        // The text on the clipboard (clipboard.text, SDK 4), only while the utility is on screen.
+        define("clipboardText", { [weak self] () -> Any in
+            let value: String? = MainActor.assumeIsolated {
+                guard let self, allowed("clipboard.text"), !self.isPaused else { return nil }
+                return NSPasteboard.general.string(forType: .string).map { String($0.prefix(2000)) }
+            }
+            return value ?? NSNull()
+        } as @convention(block) () -> Any)
         // Screenshots (screen.capture).
         define("screen", { [weak self] (action: String, arg: String, callback: Int) -> String in
             MainActor.assumeIsolated {
@@ -868,6 +903,7 @@ final class PackRuntime {
         picker: (label, options, selected, onChange, o = {}) => Object.assign({}, o, { t: "picker", label: text(label), options: list(options).map(text), selected, onChange }),
         copy: (value, o = {}) => Object.assign({}, o, { t: "copy", text: text(value) }),
         row: (children, o = {}) => Object.assign({}, o, { t: "row", children: list(children) }),
+        flow: (children, o = {}) => Object.assign({}, o, { t: "flow", children: list(children) }),
         column: (children, o = {}) => Object.assign({}, o, { t: "column", children: list(children) }),
         section: (title, children, o = {}) => Object.assign({}, o, { t: "section", title: title == null ? null : text(title), children: list(children) }),
         list: (items, o = {}) => Object.assign({}, o, { t: "list", items: list(items).map(i => ({
@@ -965,7 +1001,19 @@ final class PackRuntime {
         clipboard: Object.freeze({
           write(t, o = {}) { need("clipboard.write"); N.clipboardWrite(text(t), !!(o && o.concealed)); },
           writeImage(d) { need("clipboard.write"); return N.clipboardWriteImage(drawing(d)); },
+          readText() { need("clipboard.text"); return N.clipboardText(); },
         }),
+        dictionary: (() => {
+          const D = (action, arg) => { need("dictionary"); return JSON.parse(N.dictionary(action, arg == null ? "" : text(arg))); };
+          return Object.freeze({
+            define(word) { return D("define", word); },
+            synonyms(word) { return D("synonyms", word); },
+            suggest(word) { return D("suggest", word) || []; },
+            status() { return D("status"); },
+            speak(word) { D("speak", word); },
+            open(word) { D("open", word); },
+          });
+        })(),
         text: Object.freeze({
           base64Encode(s) { return N.base64Encode(text(s)); },
           base64Decode(s) { return N.base64Decode(text(s)); },
@@ -1130,6 +1178,7 @@ final class PackRuntime {
         undo: () => call("undo") === true,
         redo: () => call("redo") === true,
         shouldClose: () => call("shouldClose") !== false,
+        shortcut: () => { call("shortcut"); },
         fire: id => { const f = pending.get(id); pending.delete(id); if (f) f(); },
         clearTimers: () => { pending.clear(); },
         overlayPress: i => { const b = buttons[i]; if (b && typeof b.action === "function") b.action(); },

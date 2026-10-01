@@ -1,5 +1,17 @@
 import SwiftUI
 
+/// The tabs' coordinate space and gap, for dragging a tab (`NotesView`).
+let noteTabSpace = "noteTabs"
+let noteTabSpacing: CGFloat = 6
+
+/// Where each tab is in `noteTabSpace`, so a dragged tab knows which tabs it has passed.
+struct NoteTabFramesKey: PreferenceKey {
+    static let defaultValue: [UUID: CGRect] = [:]
+    static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
+        value.merge(nextValue()) { $1 }
+    }
+}
+
 /// The horizontally scrolling row of note tabs.
 /// When the tabs don't fit, a slim slider appears underneath (drag it, or click the track to jump).
 /// The active tab is always scrolled into view.
@@ -14,7 +26,8 @@ struct NoteTabStrip<Content: View>: View {
             // macOS 14 lacks the scroll-position APIs the custom slider needs; use the system scroll bar.
             ScrollViewReader { proxy in
                 ScrollView(.horizontal) {
-                    HStack(spacing: 6) { content() }.padding(2)
+                    HStack(spacing: noteTabSpacing) { content() }.padding(2)
+                        .coordinateSpace(name: noteTabSpace)
                 }
                 .scrollIndicators(.visible)
                 .onChange(of: activeID) {
@@ -43,8 +56,9 @@ private struct SliderTabStrip<Content: View>: View {
 
     var body: some View {
         ScrollView(.horizontal) {
-            HStack(spacing: 6) { content() }
+            HStack(spacing: noteTabSpacing) { content() }
                 .padding(2)
+                .coordinateSpace(name: noteTabSpace)
                 .scrollTargetLayout()
         }
         .scrollIndicators(.never)

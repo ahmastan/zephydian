@@ -3,20 +3,21 @@ import SwiftUI
 struct SpokesView: View {
     let game: SpokesGame
     @Environment(SettingsStore.self) private var settings
+    @Environment(\.boardScale) private var scale
 
     @State private var dragPoint: CGPoint?
     @State private var dragMoved = false
     @State private var dragStarted = false
     @State private var pressedLast = false
 
-    private static let wheelSize: CGFloat = 176
-    private static let letterSize: CGFloat = 42
-    private static let letterRadius: CGFloat = 58
+    private var wheelSize: CGFloat { (176 * scale).rounded() }
+    private var letterSize: CGFloat { (42 * scale).rounded() }
+    private var letterRadius: CGFloat { 58 * scale }
 
     var body: some View {
         ZStack(alignment: .top) {
             VStack(spacing: 10) {
-                grid.frame(height: 188)
+                grid.frame(height: (188 * scale).rounded())
                 currentWord.frame(height: 34)
                 HStack(spacing: 18) {
                     roundButton("shuffle", label: "Shuffle (Space)") { game.shuffle() }
@@ -53,10 +54,10 @@ struct SpokesView: View {
         let solution = puzzle.solution
         let found = game.found
         let justFound = game.justFound.flatMap { word in puzzle.entries.first { $0.word == word } }.map { Set($0.cells) } ?? []
-        let accent = settings.accent.color
+        let accent = settings.accentColor
 
         return GeometryReader { geometry in
-            let cell = min(30, geometry.size.width / CGFloat(puzzle.width), geometry.size.height / CGFloat(puzzle.height))
+            let cell = min(30 * scale, geometry.size.width / CGFloat(puzzle.width), geometry.size.height / CGFloat(puzzle.height))
             let origin = CGPoint(x: (geometry.size.width - cell * CGFloat(puzzle.width)) / 2,
                                  y: (geometry.size.height - cell * CGFloat(puzzle.height)) / 2)
             Canvas { context, _ in
@@ -107,11 +108,11 @@ struct SpokesView: View {
     // MARK: Wheel
 
     private var wheel: some View {
-        let size = Self.wheelSize
+        let size = wheelSize
         let center = CGPoint(x: size / 2, y: size / 2)
         let positions = letterPositions(center: center)
         let selected = game.selection
-        let accent = settings.accent.color
+        let accent = settings.accentColor
 
         return ZStack {
             Circle().fill(Tokens.fill)
@@ -128,9 +129,9 @@ struct SpokesView: View {
             ForEach(game.letters.indices, id: \.self) { index in
                 let isSelected = selected.contains(index)
                 Text(String(game.letters[index]))
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .font(.system(size: 20 * scale, weight: .bold, design: .rounded))
                     .foregroundStyle(isSelected ? Color.white : Color.primary)
-                    .frame(width: Self.letterSize, height: Self.letterSize)
+                    .frame(width: letterSize, height: letterSize)
                     .background(Circle().fill(isSelected ? accent : Tokens.fillHover))
                     .position(positions[index])
                     .accessibilityElement()
@@ -174,12 +175,12 @@ struct SpokesView: View {
         let count = game.letters.count
         return (0..<count).map { i in
             let angle = Double(i) / Double(count) * 2 * .pi - .pi / 2
-            return CGPoint(x: center.x + cos(angle) * Self.letterRadius, y: center.y + sin(angle) * Self.letterRadius)
+            return CGPoint(x: center.x + cos(angle) * letterRadius, y: center.y + sin(angle) * letterRadius)
         }
     }
 
     private func letterIndex(at point: CGPoint, positions: [CGPoint]) -> Int? {
-        positions.indices.first { hypot(positions[$0].x - point.x, positions[$0].y - point.y) <= Self.letterSize / 2 + 2 }
+        positions.indices.first { hypot(positions[$0].x - point.x, positions[$0].y - point.y) <= letterSize / 2 + 2 }
     }
 
     // MARK: Buttons

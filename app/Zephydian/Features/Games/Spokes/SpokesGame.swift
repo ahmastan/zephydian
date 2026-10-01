@@ -123,10 +123,12 @@ final class SpokesGame: GameSession {
 
         if puzzle.entries.contains(where: { $0.word == word }) {
             guard !found.contains(word) else { show("Already found"); return }
+            if found.isEmpty && revealed.isEmpty { GameStats.started("wheel") }   // the first word (or hint) starts a level
             found.insert(word)
             highlight(word)
             if isComplete {
                 hints += 1
+                GameStats.won("wheel")
                 show("Level complete!")
             }
         } else if valid.contains(word) {
@@ -151,11 +153,16 @@ final class SpokesGame: GameSession {
         guard let cell = hidden.randomElement() else { return }
         revealed.insert(cell)
         hints -= 1
+        let wasStarted = !found.isEmpty || revealed.count > 1
         // A word whose letters are all revealed counts as found.
         for entry in puzzle.entries where !found.contains(entry.word) && entry.cells.allSatisfy(visibleCells.contains) {
             found.insert(entry.word)
         }
-        if isComplete { hints += 1 }
+        if !wasStarted { GameStats.started("wheel") }   // a hint can start a level too
+        if isComplete {
+            hints += 1
+            GameStats.won("wheel")
+        }
         save()
     }
 

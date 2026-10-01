@@ -102,6 +102,13 @@ final class PackSession: GameSession, PackHost {
         return failure == nil && runtime.redo()
     }
 
+    /// Opened with the utility's own shortcut: it's on screen again, then its `shortcut()` runs.
+    func shortcutPressed() {
+        guard failure == nil else { return }
+        resume()
+        runtime.shortcut()
+    }
+
     /// The window's close button or ⌘W: false if the pack keeps it open for now.
     func shouldClose() -> Bool { failure != nil || runtime.shouldClose() }
 
@@ -231,7 +238,7 @@ struct PackView: View {
     var body: some View {
         // Read the state here (not inside Canvas) so SwiftUI redraws when it changes.
         let shapes = session.shapes
-        let accent = settings.accent.color
+        let accent = settings.accentColor
 
         GeometryReader { proxy in
             ZStack(alignment: .top) {
@@ -250,14 +257,14 @@ struct PackView: View {
                 }
             }
             .onAppear {
-                session.updateTheme(dark: colorScheme == .dark, accent: settings.accent.nsColor)
+                session.updateTheme(dark: colorScheme == .dark, accent: settings.accentNSColor)
                 session.setSize(proxy.size)
             }
             .onChange(of: proxy.size) { _, size in session.setSize(size) }
         }
         .padding(.horizontal, 12)
-        .onChange(of: colorScheme) { _, scheme in session.updateTheme(dark: scheme == .dark, accent: settings.accent.nsColor) }
-        .onChange(of: settings.accent) { _, accent in session.updateTheme(dark: colorScheme == .dark, accent: accent.nsColor) }
+        .onChange(of: colorScheme) { _, scheme in session.updateTheme(dark: scheme == .dark, accent: settings.accentNSColor) }
+        .onChange(of: settings.accentNSColor) { _, accent in session.updateTheme(dark: colorScheme == .dark, accent: accent) }
         .animation(.easeOut(duration: 0.15), value: session.overlay)
         .animation(.easeOut(duration: 0.15), value: session.isPaused)
         .animation(.easeOut(duration: 0.2), value: session.toast)

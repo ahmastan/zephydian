@@ -44,6 +44,9 @@ struct GameScreen: View {
 
                 session.makeView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    // A new session for the same game (a reloaded pack, opened again by its shortcut
+                    // while still on screen) gets a new view, so it appears and starts.
+                    .id(ObjectIdentifier(session))
 
                 if !session.hint.isEmpty {
                     Text(session.hint)

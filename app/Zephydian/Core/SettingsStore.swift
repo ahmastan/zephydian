@@ -33,7 +33,7 @@ nonisolated enum AutoHideMode: String, CaseIterable, Identifiable {
 
     var explanation: String {
         switch self {
-        case .smart: "Hides when the mouse leaves, but never while a game is open or you’re typing a note."
+        case .smart: "Hides when the mouse leaves, but never while a game is open or you’re typing (in a note or a utility)."
         case .always: "Hides whenever the mouse leaves the panel. Games pause automatically."
         case .never: "Only Esc, a click outside, or the corner closes the panel."
         }
@@ -80,6 +80,27 @@ nonisolated enum PanelStyle: String, CaseIterable, Identifiable {
     var cornerRadius: CGFloat { self == .glass ? 24 : 16 }
 }
 
+/// How big the panel is. Text keeps its size; game boards, notes and lists get more or less room.
+nonisolated enum PanelSize: String, CaseIterable, Identifiable {
+    case small, medium, large
+    var id: Self { self }
+    var title: String {
+        switch self {
+        case .small: "Small"
+        case .medium: "Medium"
+        case .large: "Large"
+        }
+    }
+
+    var size: NSSize {
+        switch self {
+        case .small: NSSize(width: 340, height: 480)
+        case .medium: NSSize(width: 380, height: 540)
+        case .large: NSSize(width: 440, height: 620)
+        }
+    }
+}
+
 /// Optional system-wide shortcut to open the panel. Presets avoid clashing with common app shortcuts.
 // MARK: - Store
 
@@ -94,13 +115,28 @@ final class SettingsStore {
     var displayName: String? { didSet { defaults.set(displayName, forKey: "displayName") } }
     var appearance: AppearanceMode { didSet { defaults.set(appearance.rawValue, forKey: "appearance") } }
     var accent: AccentTheme { didSet { defaults.set(accent.rawValue, forKey: "accent") } }
+    /// Changes when macOS's accent color changes, so the System accent (and its swatch) redraw.
+    private(set) var systemAccentRevision = 0
+
+    /// Called when macOS's accent color changes (System Settings → Appearance).
+    func systemAccentDidChange() {
+        SystemAccent.revision += 1
+        systemAccentRevision += 1
+    }
     var menuBarIcon: MenuBarIcon { didSet { defaults.set(menuBarIcon.rawValue, forKey: "menuBarIcon") } }
     var autoHide: AutoHideMode { didSet { defaults.set(autoHide.rawValue, forKey: "autoHide") } }
     var hideDelayMs: Int { didSet { defaults.set(hideDelayMs, forKey: "hideDelayMs") } }
     var notesMonospaced: Bool { didSet { defaults.set(notesMonospaced, forKey: "notesMonospaced") } }
+    /// Notes are open in their own window (instead of the panel's Notes tab).
+    var notesDetached: Bool { didSet { defaults.set(notesDetached, forKey: "notesDetached") } }
+    /// The Notes window floats above other apps (on every Space) instead of being an ordinary window.
+    var notesWindowOnTop: Bool { didSet { defaults.set(notesWindowOnTop, forKey: "notesWindowOnTop") } }
+    /// Where the Notes window was last, as `NSStringFromRect`.
+    var notesWindowFrame: String? { didSet { defaults.set(notesWindowFrame, forKey: "notesWindowFrame") } }
     var fiveHighContrast: Bool { didSet { defaults.set(fiveHighContrast, forKey: "fiveHighContrast") } }
     var hasCompletedOnboarding: Bool { didSet { defaults.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding") } }
     var panelStyle: PanelStyle { didSet { defaults.set(panelStyle.rawValue, forKey: "panelStyle") } }
+    var panelSize: PanelSize { didSet { defaults.set(panelSize.rawValue, forKey: "panelSize") } }
     /// The panel's global shortcut, recorded by the person (nil = none).
     var panelShortcut: KeyShortcut? { didSet { defaults.set(try? JSONEncoder().encode(panelShortcut), forKey: "panelShortcut") } }
 
@@ -122,9 +158,13 @@ final class SettingsStore {
         autoHide = value("autoHide", .smart)
         hideDelayMs = int("hideDelayMs", 400)
         notesMonospaced = defaults.bool(forKey: "notesMonospaced")
+        notesDetached = defaults.bool(forKey: "notesDetached")
+        notesWindowOnTop = defaults.object(forKey: "notesWindowOnTop") == nil ? true : defaults.bool(forKey: "notesWindowOnTop")
+        notesWindowFrame = defaults.string(forKey: "notesWindowFrame")
         fiveHighContrast = defaults.bool(forKey: "fiveHighContrast")
         hasCompletedOnboarding = defaults.bool(forKey: "hasCompletedOnboarding")
         panelStyle = value("panelStyle", .glass)
+        panelSize = value("panelSize", .medium)
         // Worked out first and assigned once: in an @Observable class even this assignment saves.
         var shortcut = defaults.data(forKey: "panelShortcut").flatMap { try? JSONDecoder().decode(KeyShortcut?.self, from: $0) } ?? nil
         // Before any key could be recorded there were three choices; keep the one picked.

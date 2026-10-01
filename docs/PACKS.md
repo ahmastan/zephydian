@@ -14,6 +14,7 @@ This guide covers **SDK version 3**. Version 1 brought games. Version 2 added **
 - [Utilities (SDK 2)](#utilities-sdk-2)
 - [Capabilities](#capabilities)
 - [Windows and image editing (SDK 3)](#windows-and-image-editing-sdk-3)
+- [Words and copied text (SDK 4)](#words-and-copied-text-sdk-4)
 - [A complete example](#a-complete-example)
 - [Testing your pack](#testing-your-pack)
 - [Submitting a pack](#submitting-a-pack)
@@ -131,7 +132,7 @@ When a card from `z.overlay()` is showing, Enter presses its prominent button.
 `z` is a global object available everywhere in `main.js`.
 
 **Screen**
-- `z.width`, `z.height`: the size of the game area in points. It can differ between Macs, so always draw from these.
+- `z.width`, `z.height`: the size of the game area in points. It differs with the panel size people choose (Small, Medium or Large) and between Macs, so always draw from these.
 - `z.redraw()`: ask for `draw(g)` to be called again before the next frame. Calling it several times in a row still draws once.
 - `z.theme`: `{ dark, accent, text, secondary, fill, background }`. `dark` is true in dark mode, and the rest are color strings for the current appearance and accent (see Colors).
 
@@ -221,6 +222,7 @@ zephydian.utility({
   key(e)   { },          // a key pressed while no text field has the cursor; return true if used
   pause()  { },          // the panel hid
   resume() { },          // it's back on screen
+  shortcut() { },        // SDK 4: opened with its own keyboard shortcut (the `shortcut` capability)
 });
 ```
 
@@ -230,15 +232,16 @@ Utilities have no pause button or cards; `z.menu()`, `z.toast()`, `z.hint()`, `z
 
 | Control | What it is |
 | --- | --- |
-| `z.ui.text(text, { style, align, selectable, color })` | A line or paragraph. `style`: `"body"` (default), `"title"`, `"large"` (a big number, like a result), `"secondary"`, `"caption"`, `"mono"`. `align`: `"left"`, `"center"`, `"right"`. `selectable: true` lets people select and copy it. |
+| `z.ui.text(text, { style, align, selectable, color, italic })` | A line or paragraph. `style`: `"body"` (default), `"title"`, `"large"` (a big number, like a result), `"display"` (a big serif heading, SDK 4), `"secondary"`, `"caption"`, `"mono"`. `align`: `"left"`, `"center"`, `"right"`. `selectable: true` lets people select and copy it. `italic: true` (SDK 4) for examples and labels. |
 | `z.ui.field({ value, placeholder, onChange(text), onSubmit(text), multiline, lines, mono })` | A text field. `onChange` gets every edit; `onSubmit` gets Enter. Set `value` from your state: the field keeps the cursor where it is while you type. `multiline: true` with `lines` (1–30) for bigger text. |
-| `z.ui.button(label, onPress, { symbol, style, disabled })` | A button. `style`: `"plain"` (default), `"prominent"` (the main action) or `"destructive"`. `symbol` adds an SF Symbol. |
+| `z.ui.button(label, onPress, { symbol, style, disabled, selected })` | A button. `style`: `"plain"` (default), `"prominent"` (the main action) or `"destructive"`. `symbol` adds an SF Symbol. SDK 4 adds `"icon"` (just the symbol; `label` becomes its tooltip and what VoiceOver reads) and `"chip"` (a small rounded word or tag, for a `flow`; `selected: true` makes it stand out in the accent color). |
 | `z.ui.toggle(label, value, onChange(on))` | A switch. |
 | `z.ui.slider({ value, min, max, step, onChange(value) })` | A slider. With `step`, values snap to it. |
 | `z.ui.segmented(options, selected, onChange(index))` | A few choices side by side. |
 | `z.ui.picker(label, options, selected, onChange(index))` | A pop-up menu for longer lists of choices. |
 | `z.ui.copy(text, { label, concealed })` | A Copy button. Copying from a button someone clicks needs no capability. `concealed: true` marks the text so clipboard histories skip it (for passwords). |
 | `z.ui.row(children, { spacing, align })`, `z.ui.column(children, { spacing, align })` | Lay controls out side by side or top to bottom. |
+| `z.ui.flow(children, { spacing })` | SDK 4. Side by side, wrapping onto more lines when they don't fit, like tags. |
 | `z.ui.section(title, children)` | A group on a rounded card, like the sections in Settings. `title` can be `null`. |
 | `z.ui.list(items, { selected, onSelect(id), onAction(id, index), empty })` | Rows. Each item is `{ id, title, subtitle, detail, symbol, image, actions: [{ symbol, label }] }`; `image` (a clipboard history picture) shows a small thumbnail instead of the symbol. `onAction` gets the row id and which action button was clicked. `empty` is shown when there are no items. |
 | `z.ui.canvas({ width, height, draw(g, width, height) })` | A small drawing area using the same drawing API as games (a QR code, a chart, a color wheel). |
@@ -301,11 +304,13 @@ A capability is something a pack may do beyond its own screen and storage. Each 
 | `timers` | Run timers in the background and play a sound when they end | `z.timers.start({ label, seconds, sound, chain })` → id. `chain` is a list of `{ label, seconds }` phases that start one after another (a focus cycle). `z.timers.list()` → `[{ id, label, seconds, paused, endsAt, remaining, phase, phases, sound }]` (times in ms), `z.timers.pause(id)`, `resume(id)`, `cancel(id)`, `z.timers.finished()` → the last day's `{ label, at }`, `z.timers.sounds()` and `z.timers.preview(sound)`. Timers are kept if Zephydian quits. |
 | `notifications` | Show notifications (macOS asks you first) | With `timers`: a notification when each timer ends. |
 | `clipboard.read` | Read what you copy, in the background while it's switched on | `z.history.record(on)`, `z.history.recording()`, `z.history.items({ query })` → `[{ id, kind, text, image, width, height, appName, at, pinned }]`, `z.history.copy(id)`, `pin(id, on)`, `remove(id)`, `clear()` (keeps pinned), `apps()` and `ignore(appID, on)`. Zephydian records text and images (never files, and never what password managers mark private), keeps the last 200 plus pinned items on this Mac, and deletes them when the pack is removed. Show an item's picture with a list row's `image`. |
-| `shortcut` | Open itself with a keyboard shortcut you choose | Put `z.ui.shortcut(label)` in your view: a field where the person records any key combination, with a warning under it if macOS, most apps' menus, another Zephydian shortcut or another app already uses it. `z.shortcut.get()` → the label (like "⌥⇧4") or `null`, `z.shortcut.clear()`. Pressing it opens the panel on the pack. |
+| `shortcut` | Open itself with a keyboard shortcut you choose | Put `z.ui.shortcut(label)` in your view: a field where the person records any key combination, with a warning under it if macOS, most apps' menus, another Zephydian shortcut or another app already uses it. `z.shortcut.get()` → the label (like "⌥⇧4") or `null`, `z.shortcut.clear()`. Pressing it opens the panel on the pack, then (SDK 4) calls its `shortcut()`. |
 | `system.stats` | Read CPU, memory, disk, battery and network use | `z.system.stats()` → `{ cpu: { user, system, cores }, memory: { used, total, pressure }, disk: { free, total }, battery: { present, level, charging, pluggedIn, minutesLeft, minutesToFull }, network: { in, out }, uptime }`. CPU and network (bytes per second) are measured since the previous call, so call it on a steady loop, only while on screen. There are no per-app figures. |
 
 A **drawing** for images is `{ width, height, scale, draw(g, width, height) }`, using the same drawing API as games. `scale` (1–4, default 2) is pixels per point. Theme colors aren't meaningful outside the panel, so exported drawings should use fixed colors like `"#000000"`.
 
+| `dictionary` | Look up words in the dictionary and thesaurus that come with macOS, and say them aloud | See [Words and copied text](#words-and-copied-text-sdk-4). SDK 4. |
+| `clipboard.text` | Read the text you've copied, only while it's on screen | `z.clipboard.readText()` → the text on the clipboard (up to 2,000 characters), or `null`. It gives `null` while the utility is off screen. SDK 4. |
 | `windows` | Open its own window (Zephydian shows in the Dock while it's open) | See [Windows and image editing](#windows-and-image-editing-sdk-3). SDK 3. |
 | `images.edit` | Open your screenshots, an image you pick or one you paste, and save the edited copy where you choose | `z.images`, see [Windows and image editing](#windows-and-image-editing-sdk-3). SDK 3. |
 | `screen.capture` | Take pictures of your screen (macOS asks you first) and save them in Pictures/Screenshots or a folder you choose | `z.screen.capture(mode, done)` with `"area"`, `"window"` or `"screen"`: Zephydian hides the panel, shows its own selection (Esc cancels), waits the delay, captures (leaving its own windows out) and shows a preview card with Copy, Save, Edit and Close; left alone, the shot is copied. `done({ id })` or `done({ error })`. `z.screen.permission()`, `requestPermission()`, `prefs()` / `setPrefs({ delay, pointer, sound, format, autoCopy })` (delay 0, 3, 5 or 10; format `"png"` or `"jpeg"`; `autoCopy` copies every shot as soon as it's taken), `folder()` → `{ label, custom }`, `chooseFolder(done)`, `resetFolder()`, `openFolder()`, `shots()` → this session's `[{ id, width, height, at, saved, image }]`, `copy(id)`, `save(id)` → file name, `saveAs(id, done)`, `delete(id)` (a saved file goes to the Trash), `canEdit()` and `edit(id)` (opens the installed image editor, such as Markup, in its own window). A pack with `shortcut` and `screen.capture` takes an Area screenshot when its shortcut is pressed. |
@@ -372,6 +377,23 @@ The picture's pixels never reach JavaScript. A pack gets an **id** (`"image:…"
 | `z.images.discard(id)` | Deletes a screenshot, and moves its saved file to the Trash. Opened files are never deleted. |
 
 A utility with `"handles": ["image"]` in its manifest is the one a screenshot's Edit button opens: its window starts with `{ image: id }`.
+
+## Words and copied text (SDK 4)
+
+With the `dictionary` capability, a utility reads the **New Oxford American Dictionary** and the **Oxford American Writer's Thesaurus** that come with macOS. Nothing is downloaded, and lookups work offline.
+
+| Call | What it returns |
+| --- | --- |
+| `z.dictionary.define(word)` | `{ word, found, entries }`. Each entry is `{ headword, homograph, syllables, pronunciation, groups, phrases, derivatives, origin }`. A group is one part of speech, `{ pos, forms, senses }`. A sense is `{ label, text, examples, subsenses }`, where `label` is something like `"informal"` or `"with object"`. A phrase is `{ phrase, senses }`, and a derivative is `{ word, pos }`. When `found` is `false`, `suggestions` lists words it might be. `headword` can differ from what was typed ("went" gives "go"). |
+| `z.dictionary.synonyms(word)` | `{ word, found, entries }`. Each entry is `{ headword, groups: [{ pos, senses }] }`, and a sense is `{ example, synonyms: [{ word, core }], labeled: [{ label, words }], antonyms }`. `core` marks the closest synonyms, and `labeled` holds groups such as "informal" or "British English". |
+| `z.dictionary.suggest(word)` | Words `word` could be the start of, then spelling guesses. |
+| `z.dictionary.status()` | `{ dictionary, thesaurus }`: whether each one is on this Mac. |
+| `z.dictionary.speak(word)` | Says the word with the Mac's voice. |
+| `z.dictionary.open(word)` | Shows the word in Apple's Dictionary app. |
+
+If a book isn't on the Mac, a lookup returns `available: false`. People can turn it on in the Dictionary app's Settings, and macOS downloads it.
+
+`clipboard.text` (above) lets a utility read the copied text when it's on screen, for example to look up the word someone just copied. Together with `shortcut`, the utility's `shortcut()` can do that as soon as the shortcut opens it.
 
 ## A complete example
 

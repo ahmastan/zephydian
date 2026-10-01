@@ -2,11 +2,12 @@ import SwiftUI
 
 struct StackrView: View {
     let game: StackrGame
+    @Environment(\.boardScale) private var scale
 
     private static let cell: CGFloat = 19
 
     var body: some View {
-        let cell = Self.cell
+        let cell = (Self.cell * scale).rounded(.down)
         let boardSize = CGSize(width: CGFloat(StackrGame.cols) * cell, height: CGFloat(StackrGame.rows) * cell)
         // Read state here so SwiftUI redraws when it changes.
         let board = game.board

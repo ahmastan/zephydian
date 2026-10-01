@@ -28,18 +28,5 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 ahmastan. MIT License.</string>
-	<key>UTExportedTypeDeclarations</key>
-	<array>
-		<dict>
-			<key>UTTypeConformsTo</key>
-			<array>
-				<string>public.data</string>
-			</array>
-			<key>UTTypeDescription</key>
-			<string>Zephydian note tab</string>
-			<key>UTTypeIdentifier</key>
-			<string>com.ahmastan.zephydian.note-tab</string>
-		</dict>
-	</array>
 </dict>
 </plist>
