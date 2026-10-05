@@ -11,7 +11,7 @@ final class PackImages {
     enum Source: Equatable {
         /// A screenshot from this session (its id in `ScreenCapture`).
         case screenshot(String)
-        /// A file the person picked. The sandbox lets the app write it back while it's running.
+        /// A file the person picked. Saving writes it back in place.
         case file(URL)
         /// Pasted from the clipboard: it has no place of its own yet.
         case clipboard

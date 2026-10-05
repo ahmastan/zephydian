@@ -14,6 +14,9 @@ struct RootView: View {
             if model.isOnboarding {
                 OnboardingView()
                     .transition(.opacity)
+            } else if model.isShowingShelf {
+                ShelfContent(floating: false) { model.closeShelf() }
+                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
             } else if model.isShowingGame {
                 GameScreen()
                     .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
@@ -51,6 +54,7 @@ struct RootView: View {
         .animation(.easeOut(duration: 0.2), value: model.isShowingGame)
         .animation(.easeOut(duration: 0.2), value: model.isShowingLibrary)
         .animation(.easeOut(duration: 0.2), value: model.isShowingStats)
+        .animation(.easeOut(duration: 0.2), value: model.isShowingShelf)
         .tint(settings.accentColor)
         .panelButtonStyle()
         .overlay {
@@ -74,6 +78,14 @@ struct RootView: View {
                 .accessibilityHidden(true)
             Text("Zephydian").font(.system(size: 15, weight: .semibold))
             Spacer()
+            // Things parked on the Shelf: a way back to them from the panel.
+            if Features.shared.isOn("shelf"), !ShelfStore.shared.items.isEmpty {
+                Button { model.openShelf() } label: {
+                    Label("Shelf · \(ShelfStore.shared.items.count)", systemImage: "tray.full")
+                }
+                .glassIconButtonStyle()
+                .help("What's on the Shelf")
+            }
         }
         .padding(.horizontal, 16)
         .frame(height: 44)

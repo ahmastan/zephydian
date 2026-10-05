@@ -60,6 +60,9 @@ nonisolated struct PackUINode: Equatable, Identifiable {
     var children: [PackUINode] = []
     /// What VoiceOver reads for controls that have no text of their own (a color swatch).
     var label: String?
+    /// `center: true` on the view's top control: it sits in the middle of the page (a start
+    /// page with one button) instead of at the top.
+    var centered = false
 
     static let maxNodes = 2000
     static let maxDepth = 16
@@ -174,7 +177,7 @@ nonisolated struct PackUINode: Equatable, Identifiable {
             throw ParseError(description: "unknown control \"\(s("t") ?? "?")\"")
         }
         let children = try (o["children"] as? [[String: Any]] ?? []).map { try parse($0, depth: depth + 1, count: &count) }
-        return PackUINode(id: key, kind: kind, children: children, label: s("accessibilityLabel"))
+        return PackUINode(id: key, kind: kind, children: children, label: s("accessibilityLabel"), centered: b("center"))
     }
 }
 
@@ -221,6 +224,7 @@ struct UtilityView: View {
                     ScrollView {
                         PackNodeView(node: root, session: session)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(minHeight: root.centered ? max(0, proxy.size.height - 16) : nil)
                     }
                     .contentMargins(.horizontal, 16, for: .scrollContent)
                     .contentMargins(.bottom, 16, for: .scrollContent)
@@ -252,7 +256,7 @@ struct UtilityView: View {
 }
 
 /// One node and its children. Recursive, so children are type-erased.
-private struct PackNodeView: View {
+struct PackNodeView: View {
     let node: PackUINode
     let session: PackSession
     @Environment(SettingsStore.self) private var settings
@@ -647,7 +651,9 @@ private struct PackListView: View {
 
     private func row(_ item: PackUINode.ListItem) -> some View {
         HStack(spacing: 10) {
-            if let name = item.image, let picture = image(name) {
+            if let name = item.image, name.hasPrefix("app:"), let picture = image(name) {
+                Image(nsImage: picture).resizable().scaledToFit().frame(width: 32, height: 32).accessibilityHidden(true)
+            } else if let name = item.image, let picture = image(name) {
                 Image(nsImage: picture)
                     .resizable()
                     .scaledToFill()

@@ -13,6 +13,8 @@ final class AppModel {
 
     /// The selected tab, remembered between launches.
     var tab: Tab { didSet { UserDefaults.standard.set(tab.rawValue, forKey: "lastTab") } }
+    /// The Settings window's page or feature (remembered between openings).
+    var settingsSelection: SettingsSelection { didSet { UserDefaults.standard.set(settingsSelection.rawValue, forKey: "settingsPage") } }
 
     /// True while the first-launch welcome card is showing.
     var isOnboarding = false
@@ -63,6 +65,11 @@ final class AppModel {
     }
     func closeLibrary() { isShowingLibrary = false }
 
+    /// True while the panel shows the Shelf (something was dragged into the corner).
+    private(set) var isShowingShelf = false
+    func openShelf() { isShowingShelf = true }
+    func closeShelf() { isShowingShelf = false }
+
     /// True while the Stats screen (opened from the Games grid's Stats tile) is showing.
     private(set) var isShowingStats = false
     func openStats() { isShowingStats = true }
@@ -105,6 +112,7 @@ final class AppModel {
     }
 
     // Actions the views can trigger. Wired up by AppDelegate.
+    @ObservationIgnored var showPanel: () -> Void = {}
     @ObservationIgnored var closePanel: () -> Void = {}
     @ObservationIgnored var startOnboarding: () -> Void = {}
     @ObservationIgnored var finishOnboarding: () -> Void = {}
@@ -112,10 +120,13 @@ final class AppModel {
     @ObservationIgnored var detachNotes: () -> Void = {}
     @ObservationIgnored var showNotesWindow: () -> Void = {}
     @ObservationIgnored var attachNotes: () -> Void = {}
+    /// Opens the Settings window, on a page or feature if one is given (a `SettingsSelection` raw value).
+    @ObservationIgnored var openSettingsWindow: (String?) -> Void = { _ in }
     /// A game was closed or replaced by another one (lets a waiting pack update install).
     @ObservationIgnored var gameDidClose: (String) -> Void = { _ in }
 
     init() {
         tab = UserDefaults.standard.string(forKey: "lastTab").flatMap(Tab.init(rawValue:)) ?? .games
+        settingsSelection = UserDefaults.standard.string(forKey: "settingsPage").flatMap(SettingsSelection.init(rawValue:)) ?? .page(.general)
     }
 }

@@ -7,6 +7,32 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-05
+
+### Added
+- **Mac features you switch on**, on a new **Features** page in Settings (Essentials, Everything or None to start, or one by one). A feature that's off costs nothing:
+  - **Windows and Dock:** **Dock Preview** (hover an app in the Dock to see, pick, minimize or close its windows), an **App Switcher** for ⌘Tab and ⌘` with live window previews, search, and W to close or Q to quit, **Window Layout** (halves, thirds, quarters and displays with ⌃⌥ shortcuts, ⌥-drag to move and ⌥⌘-drag to resize), **Maximize with the Green Button**, **Quit Protection** (press ⌘Q twice), **Quit on Close** and **Focus Follows Mouse**.
+  - **Keyboard and mouse:** **Text Snippets** (type `;addr` and it becomes your address, or pick from a menu), a **Super Key** on Caps Lock, smooth **Scrolling** with its own direction, **Mouse Buttons**, **Three-Finger Middle Click**, **No Mouse Acceleration**, an **Extra Click Filter** and **Key Debounce** for worn hardware.
+  - **Clipboard and files:** **Clean URLs**, **Paste as Plain Text**, **Auto-Clear Clipboard**, a **Shelf** that appears when you shake a dragged file (or in the corner panel), **Finder Shortcuts** (cut and paste files with ⌘X and ⌘V with a floating panel, a rename shortcut, and paste an image as a file) and a **Disk Image Installer**.
+  - **Everyday tools:** a **Command Bar** (⌥Space: apps, windows, files, menus, clipboard, snippets, math, units and settings), a **Quick Panel** of favorite tools, **Quick Toggles** (dark mode, hidden files, desktop icons, eject, empty the Trash, lock, keyboard light, mute the mic), **Cleaning Mode** and a **Camera Mirror**.
+  - **System and sound:** a **Sound Mixer** in the menu bar with each app's own volume (up to 200%) and output, **Headphones Safety**, **Music Blocker**, **Display Brightness** for every display, **Bluetooth Off in Sleep**, **Menu Bar Stats** and **System Alerts**.
+- **A Settings window** (⌘, or All Settings… in the panel) in the style of System Settings, with a page for every feature, a **Permissions** page with Repair, a **Shortcuts** page, and a page for each utility with options. The panel keeps a short Settings tab.
+- **New utilities in the Library:** **Media** (shrink videos, convert and watermark images, make GIFs), **Uninstaller**, **Cleaner**, **Chat Files**, **Ports**, **App Updates** and **Homebrew**. Everything they remove goes to the Trash after you review it.
+- **Capture** (was Screenshot): screen recordings with an editor (trim, cut, blur, zoom on clicks, MP4 or GIF), copy text and QR codes from the screen, pick colors, scrolling screenshots and pinned screenshots, all from a capture bar (⇧⌘6). A **Freeze the screen** option holds everything still (videos too) while you pick, and the shortcut can take a screenshot straight away instead of showing the bar.
+- **Clipboard** pastes an item straight into the app you were in and keeps copied files; **System** shows GPU, temperatures, fans, battery health, busy apps, history graphs, your public IP and a speed test; **Awake** can keep the Mac awake by itself while chosen apps run, on power or with a display.
+- **Pack SDK 5 to 9**: settings pages, pasting, screen recording and media, system figures and the network test, and app management capabilities, plus a `center` option for a utility's start page. See `docs/PACKS.md`.
+
+### Changed
+- **Zephydian is now licensed under the GNU General Public License v3.0 or later** (it was MIT). The new app switcher and Finder cut and paste come from Vorssaint, which is GPL-licensed, and the GPL asks that the whole app use it. Zephydian stays free and open source; earlier releases keep the MIT License. See `THIRD_PARTY_NOTICES.md`.
+- **Zephydian now runs outside the App Sandbox**, because its Mac features read and arrange other apps' windows. Your notes, packs and settings move to `~/Library/Application Support/Zephydian` on first launch (the old copy is kept as a backup). Packs are still locked down by Zephydian itself.
+- Each feature asks for a macOS permission only when you switch it on, and **Settings → Permissions** shows what uses each one.
+- App Updates, Cleaner and Chat Files show their start button in the middle of the page.
+
+### Fixed
+- A long note no longer jumps to the top for a moment when you type a space.
+- Allowing a permission opens only macOS's own prompt, not System Settings as well.
+- Selecting an area for a screenshot no longer shows the pixel magnifier (the color picker still does).
+
 ## [0.6.0] - 2026-09-30
 
 ### Added

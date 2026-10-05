@@ -1,0 +1,12 @@
+{
+  "id": "cleaner",
+  "name": "Cleaner",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 9,
+  "description": "Free space from caches, logs, leftovers and old downloads. Everything goes to the Trash.",
+  "symbol": "sparkles.rectangle.stack",
+  "capabilities": ["files.clean", "notifications"],
+  "settings": true,
+  "whatsNew": "First release."
+}

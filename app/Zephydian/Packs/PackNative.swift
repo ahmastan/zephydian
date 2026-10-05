@@ -74,7 +74,7 @@ enum PackNative {
     // MARK: Save dialog (files.save)
 
     /// Asks where to save, then writes the file. The pack never sees the location, only whether it
-    /// was saved. The app can write only where the person picked (sandbox, user-selected files).
+    /// was saved, and the app writes only where the person picked.
     static func save(name: String, data: Data, done: @escaping (Bool) -> Void) {
         let panel = NSSavePanel()
         let safeName = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")

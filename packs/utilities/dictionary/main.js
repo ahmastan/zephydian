@@ -12,7 +12,6 @@ let query = "";
 let tab = 0;
 let recent = [];
 let trail = [];                 // words left by following a synonym, for Back
-let showSettings = false;
 let showAll = false;
 let remember = null;            // z.after id: keeps a typed word in Recent once typing stops
 let words = null;               // the word-of-the-day list
@@ -33,7 +32,7 @@ function lookup(kind, word) {
 
 const found = r => r && r.found;
 
-function save() { z.storage.set("state", { recent, tab, showSettings }); }
+function save() { z.storage.set("state", { recent, tab }); }
 
 function keep(word) {
   const w = word.trim();
@@ -253,8 +252,9 @@ function home() {
   return z.ui.column(parts, { spacing: 12 });
 }
 
+// Dictionary's page in Zephydian's Settings window.
 function settings() {
-  return z.ui.section("Settings", [
+  return z.ui.section(null, [
     z.ui.shortcut("Shortcut"),
     z.ui.text("From any app: copy a word, press the shortcut, and Dictionary opens on it.", { style: "caption" }),
   ]);
@@ -265,7 +265,6 @@ zephydian.utility({
     const s = z.storage.get("state") || {};
     recent = Array.isArray(s.recent) ? s.recent.filter(w => typeof w === "string").slice(0, MAX_RECENT) : [];
     tab = s.tab === 1 ? 1 : 0;
-    showSettings = !!s.showSettings;
   },
 
   // Opened with its shortcut: look up what's on the clipboard.
@@ -279,12 +278,11 @@ zephydian.utility({
         z.ui.field({ value: query, placeholder: "Look up a word", id: "search", onChange: typed,
                      onSubmit: t => { if (remember) { z.cancel(remember); remember = null; } keep(t); } }),
         z.ui.button("Look up copied word", fromClipboard, { symbol: "doc.on.clipboard", style: "icon" }),
-        z.ui.button(showSettings ? "Done" : "Settings", () => { showSettings = !showSettings; save(); },
-                    { symbol: showSettings ? "checkmark" : "gearshape", style: "icon" }),
       ], { spacing: 8 }),
-      showSettings ? settings() : null,
       hasQuery ? z.ui.segmented(TABS, tab, i => { tab = i; showAll = false; save(); }) : null,
       hasQuery ? (tab === 0 ? definition() : synonyms()) : home(),
     ], { spacing: 12 });
   },
+
+  settings: { view: settings },
 });

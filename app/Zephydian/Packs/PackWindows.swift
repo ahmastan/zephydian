@@ -113,7 +113,7 @@ final class PackWindows: NSObject, NSWindowDelegate {
         let first = entries.isEmpty
         entries.append(Entry(packID: bundle.id, window: window, session: session, host: host, input: input))
         if first {
-            NSApp.setActivationPolicy(.regular)                // Dock icon and ⌘-Tab while it's open
+            DockPresence.add("pack-windows")                  // Dock icon and ⌘-Tab while it's open
             startKeyMonitor()
         }
         services.hidePanel()
@@ -191,7 +191,7 @@ final class PackWindows: NSObject, NSWindowDelegate {
         if entries.isEmpty {
             if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
             keyMonitor = nil
-            NSApp.setActivationPolicy(.accessory)             // back to a menu bar app
+            DockPresence.remove("pack-windows")               // back to a menu bar app, unless Settings is open
         }
     }
 }

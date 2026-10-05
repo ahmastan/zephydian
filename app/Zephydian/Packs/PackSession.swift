@@ -174,6 +174,13 @@ final class PackSession: GameSession, PackHost {
             return PackServices.shared.clipboard.thumbnail(packID: bundle.id, id: String(name.dropFirst(10)))
         }
         if let cached = images[name] { return cached }
+        // An installed app's icon by bundle id ("app:com.example.App", SDK 9): public, so any utility may show it.
+        if name.hasPrefix("app:") {
+            guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: String(name.dropFirst(4))) else { return nil }
+            let icon = NSWorkspace.shared.icon(forFile: url.path)
+            images[name] = icon
+            return icon
+        }
         guard let url = bundle.assetURL(name), let image = NSImage(contentsOf: url) else { return nil }
         images[name] = image
         return image

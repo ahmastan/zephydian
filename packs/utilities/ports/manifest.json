@@ -1,0 +1,11 @@
+{
+  "id": "ports",
+  "name": "Ports",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 9,
+  "description": "See what's listening on your Mac's network ports, like a dev server on 3000, and stop it.",
+  "symbol": "point.3.connected.trianglepath.dotted",
+  "capabilities": ["ports"],
+  "whatsNew": "First release."
+}

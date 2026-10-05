@@ -135,6 +135,8 @@ final class SettingsStore {
     var notesWindowFrame: String? { didSet { defaults.set(notesWindowFrame, forKey: "notesWindowFrame") } }
     var fiveHighContrast: Bool { didSet { defaults.set(fiveHighContrast, forKey: "fiveHighContrast") } }
     var hasCompletedOnboarding: Bool { didSet { defaults.set(hasCompletedOnboarding, forKey: "hasCompletedOnboarding") } }
+    /// The one-time "New: Features" card was seen or dismissed (the welcome tour covers it for new people).
+    var featuresIntroSeen: Bool { didSet { defaults.set(featuresIntroSeen, forKey: "featuresIntroSeen") } }
     var panelStyle: PanelStyle { didSet { defaults.set(panelStyle.rawValue, forKey: "panelStyle") } }
     var panelSize: PanelSize { didSet { defaults.set(panelSize.rawValue, forKey: "panelSize") } }
     /// The panel's global shortcut, recorded by the person (nil = none).
@@ -163,6 +165,7 @@ final class SettingsStore {
         notesWindowFrame = defaults.string(forKey: "notesWindowFrame")
         fiveHighContrast = defaults.bool(forKey: "fiveHighContrast")
         hasCompletedOnboarding = defaults.bool(forKey: "hasCompletedOnboarding")
+        featuresIntroSeen = defaults.bool(forKey: "featuresIntroSeen")
         panelStyle = value("panelStyle", .glass)
         panelSize = value("panelSize", .medium)
         // Worked out first and assigned once: in an @Observable class even this assignment saves.

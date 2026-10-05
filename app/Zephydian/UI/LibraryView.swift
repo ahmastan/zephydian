@@ -33,7 +33,11 @@ struct LibraryView: View {
             content(items)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .task { await packs.loadCatalog() }   // online only because the Library was opened
+        .task {
+            await packs.loadCatalog()   // online only because the Library was opened
+            // The list is fresh, so updates install now (unless the person turned automatic updates off).
+            if packs.autoUpdate { await packs.installUpdates() }
+        }
         .onAppear { model.libraryKeyHandler = { handleKey($0) } }
         .onDisappear { model.libraryKeyHandler = nil }
         .onChange(of: model.librarySearchRequest) { searchFocused = true }
@@ -303,8 +307,9 @@ private struct LibraryActions {
     var kind: Kind {
         if packs.installing[item.id] != nil { return .installing }
         if item.isInstalled {
-            // Updates install on their own; the button appears only if that failed.
-            return packs.hasUpdate(item.id) && packs.errors[item.id] != nil ? .update : .open
+            // Updates install on their own (daily, and when the Library opens); the button appears
+            // only if that failed or automatic updates are off.
+            return packs.hasUpdate(item.id) && (packs.errors[item.id] != nil || !packs.autoUpdate) ? .update : .open
         }
         return item.needsNewerApp ? .needsNewerApp : .install
     }

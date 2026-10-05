@@ -10,7 +10,7 @@ struct ZephydianApp: App {
         Settings { EmptyView() }
             .commands {
                 // The menu bar only shows while a utility's window is open (Zephydian is then in the
-                // Dock). Settings… opens the panel's Settings tab instead of an empty window.
+                // Dock). Settings… opens Zephydian's own Settings window instead of an empty one.
                 CommandGroup(replacing: .appSettings) {
                     Button("Settings…") { appDelegate.openSettings() }
                         .keyboardShortcut(",")

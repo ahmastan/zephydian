@@ -10,7 +10,7 @@ import Foundation
 final class ClipboardHistory {
     struct Item: Codable, Equatable {
         var id: String
-        var kind: String              // "text" or "image"
+        var kind: String              // "text", "image" or "file"
         var text: String?
         var width: Int?
         var height: Int?
@@ -19,6 +19,8 @@ final class ClipboardHistory {
         var appName: String?
         var at: Date
         var pinned: Bool
+        /// The copied files' paths (kind "file"). Only where they are is kept, never the files.
+        var files: [String]? = nil
     }
 
     struct Store: Codable {
@@ -93,7 +95,7 @@ final class ClipboardHistory {
     /// Reads the clipboard once and adds what's worth keeping. Internal so tests can call it.
     func capture(from board: NSPasteboard, packID: String, app: NSRunningApplication?) {
         let types = board.types ?? []
-        if types.contains(where: Self.skippedTypes.contains) || types.contains(.fileURL) { return }
+        if types.contains(where: Self.skippedTypes.contains) { return }
         var s = store(packID)
         let appID = app?.bundleIdentifier
         if let appID {
@@ -101,8 +103,19 @@ final class ClipboardHistory {
             s.apps[appID] = app?.localizedName ?? appID
         }
         let now = Date()
-        if let text = board.string(forType: .string), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let text = String(text.prefix(Self.maxTextLength))
+        if types.contains(.fileURL),
+           let urls = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty {
+            let paths = urls.map(\.path)
+            let pinned = s.items.first { $0.kind == "file" && $0.files == paths }?.pinned ?? false
+            s.items.removeAll { $0.kind == "file" && $0.files == paths }       // a repeat moves to the top
+            let names = urls.map { FileManager.default.displayName(atPath: $0.path) }
+            let label = names.count == 1 ? names[0] : "\(names[0]) and \(names.count - 1) more"
+            s.items.insert(Item(id: Self.newID(), kind: "file", text: label, bytes: 0, app: appID,
+                                appName: app?.localizedName, at: now, pinned: pinned, files: paths), at: 0)
+        } else if let text = board.string(forType: .string), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            var text = String(text.prefix(Self.maxTextLength))
+            // With Clean URLs on, a copied link is kept without its tracking (the feature may not have cleaned it yet).
+            if Features.shared.isOn("clean-url"), !text.contains(where: \.isWhitespace), let cleaned = URLCleaner.clean(text) { text = cleaned }
             let pinned = s.items.first { $0.kind == "text" && $0.text == text }?.pinned ?? false
             s.items.removeAll { $0.kind == "text" && $0.text == text }       // a repeat moves to the top
             s.items.insert(Item(id: Self.newID(), kind: "text", text: text, bytes: text.utf8.count, app: appID,
@@ -133,11 +146,18 @@ final class ClipboardHistory {
     }
 
     /// Puts an item back on the clipboard (it isn't added again as a new item).
+    /// The saved items, newest first (the Command Bar searches them).
+    func items(packID: String) -> [Item] { store(packID).items }
+
     func copy(packID: String, id: String) -> Bool {
         guard let item = store(packID).items.first(where: { $0.id == id }) else { return false }
         let board = NSPasteboard.general
         board.clearContents()
-        if item.kind == "text", let text = item.text {
+        if item.kind == "file" {
+            let urls = (item.files ?? []).map { URL(filePath: $0) }.filter { FileManager.default.fileExists(atPath: $0.path) }
+            guard !urls.isEmpty else { return false }
+            board.writeObjects(urls as [NSURL])
+        } else if item.kind == "text", let text = item.text {
             board.setString(text, forType: .string)
         } else if let data = try? Data(contentsOf: imageURL(packID, id)) {
             board.setData(data, forType: .png)
@@ -146,6 +166,22 @@ final class ClipboardHistory {
             return false
         }
         ownChange = board.changeCount
+        return true
+    }
+
+    /// Puts an item on the clipboard and pastes it into the app you were in (the panel closes first).
+    /// Needs Accessibility to press ⌘V; without it the item is only copied. Returns false if it couldn't be copied.
+    func paste(packID: String, id: String) -> Bool {
+        guard copy(packID: packID, id: id) else { return false }
+        guard Permissions.shared.isGranted(.accessibility) else {
+            Permissions.shared.request(.accessibility)
+            return true
+        }
+        services.hidePanel()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(180))   // the app you were in is focused again
+            EventTap.pressKey(CGKeyCode(9), flags: .maskCommand)   // ⌘V
+        }
         return true
     }
 
@@ -198,6 +234,13 @@ final class ClipboardHistory {
     func thumbnail(packID: String, id: String) -> NSImage? {
         let key = "\(packID)/\(id)"
         if let cached = thumbnails[key] { return cached }
+        if let item = store(packID).items.first(where: { $0.id == id }), item.kind == "file" {
+            // A copied file shows its icon (or, for one image file, a picture of it).
+            guard let path = item.files?.first else { return nil }
+            let icon = (item.files?.count == 1 ? NSImage(contentsOfFile: path) : nil) ?? NSWorkspace.shared.icon(forFile: path)
+            thumbnails[key] = icon
+            return icon
+        }
         guard let image = NSImage(contentsOf: imageURL(packID, id)) else { return nil }
         thumbnails[key] = image
         return image

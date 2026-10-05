@@ -45,6 +45,16 @@ final class PackShortcuts {
 
     func remove(packID: String) { _ = set(packID: packID, nil) }
 
+    /// Gives a utility a starting shortcut once (Capture's ⇧⌘6), unless one is already set or the
+    /// person cleared it before. Kept only if it registers (nothing else owns it).
+    func offerDefault(packID: String, _ shortcut: KeyShortcut) {
+        let marker = "pack.\(packID).hotkeyOffered"
+        guard !defaults.bool(forKey: marker) else { return }
+        defaults.set(true, forKey: marker)
+        guard current(packID: packID) == nil else { return }
+        if !set(packID: packID, shortcut) { remove(packID: packID) }
+    }
+
     private func register(packID: String, _ shortcut: KeyShortcut) -> Bool {
         let hotKey = GlobalHotKey(id: nextID)
         nextID += 1

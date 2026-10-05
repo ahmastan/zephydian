@@ -137,6 +137,8 @@ final class PackRuntime {
     enum Mode: Equatable {
         case panel
         case window(input: String)
+        /// The utility's page in the Settings window (SDK 5): its `settings: { view() }` object.
+        case settings
     }
     let mode: Mode
 
@@ -174,7 +176,7 @@ final class PackRuntime {
         self.bundle = bundle
         self.host = host
         self.mode = mode
-        self.storage = storage ?? PackStorage(packID: bundle.id)
+        self.storage = storage ?? PackStorage.shared(packID: bundle.id)
         self.defaults = defaults
         self.services = services
         capabilities = Set(bundle.manifest.capabilities ?? [])
@@ -189,9 +191,18 @@ final class PackRuntime {
         guard failure == nil else { return }
         context.evaluateScript(bundle.script, withSourceURL: URL(string: "main.js"))
         if failure == nil, sdk.invokeMethod("hasApp", withArguments: []).toBool() == false {
-            fail(mode != .panel ? "main.js has no window: { view() } in zephydian.utility({ … })"
+            fail(mode == .settings ? "main.js has no settings: { view() } in zephydian.utility({ … })"
+                 : mode != .panel ? "main.js has no window: { view() } in zephydian.utility({ … })"
                  : isUtility ? "main.js never called zephydian.utility({ … })" : "main.js never called zephydian.game({ … })")
         }
+        // Another runtime of this pack (its panel screen, window or settings page) saved something.
+        self.storage.observe(by: self) { [weak self] in self?.storageChangedElsewhere() }
+    }
+
+    /// Tells the pack (SDK 5 `storageChanged()`), which reloads what it keeps in memory and is drawn again.
+    private func storageChangedElsewhere() {
+        guard isStarted, failure == nil else { return }
+        call("storageChanged")
     }
 
     deinit {
@@ -424,10 +435,10 @@ final class PackRuntime {
             return value ?? NSNull()
         } as @convention(block) (String) -> Any)
         define("storageSet", { [weak self] (key: String, json: String) -> Bool in
-            MainActor.assumeIsolated { self?.storage.set(key, json: json) ?? false }
+            MainActor.assumeIsolated { guard let self else { return false }; return self.storage.set(key, json: json, by: self) }
         } as @convention(block) (String, String) -> Bool)
-        define("storageRemove", { [weak self] (key: String) in MainActor.assumeIsolated { self?.storage.remove(key) } } as @convention(block) (String) -> Void)
-        define("storageClear", { [weak self] in MainActor.assumeIsolated { self?.storage.clear() } } as @convention(block) () -> Void)
+        define("storageRemove", { [weak self] (key: String) in MainActor.assumeIsolated { guard let self else { return }; self.storage.remove(key, by: self) } } as @convention(block) (String) -> Void)
+        define("storageClear", { [weak self] in MainActor.assumeIsolated { guard let self else { return }; self.storage.clear(by: self) } } as @convention(block) () -> Void)
         define("data", { [weak self] (name: String) -> Any in
             let text: String? = MainActor.assumeIsolated {
                 self?.bundle.assetURL(name).flatMap { try? String(contentsOf: $0, encoding: .utf8) }
@@ -473,6 +484,89 @@ final class PackRuntime {
                 return "{\"on\":\(status.on),\"until\":\(until)}"
             }
         } as @convention(block) () -> String)
+        // App management (SDK 9): the Uninstaller, Cleaner, Chat Files, Ports, App Updates and Homebrew utilities.
+        define("tools", { [weak self] (action: String, arg: String, callback: Int) -> String in
+            MainActor.assumeIsolated {
+                guard let self else { return "null" }
+                let files = self.services.files, tools = self.services.tools, id = self.bundle.id
+                let o = Self.jsonObject(arg) ?? [:]
+                let reply: (Any) -> Void = { [weak self] result in self?.respond(callback, result) }
+                let ids = (o["ids"] as? [String]) ?? []
+                let capabilities = self.capabilities
+                func need(_ capability: String) -> Bool { capabilities.contains(capability) }
+                switch action {
+                case "apps": if need("apps.uninstall") { files.apps(packID: id) { reply($0) } }
+                case "chooseApp": if need("apps.uninstall") { files.chooseApp(done: reply) }
+                case "leftovers": if need("apps.uninstall") { files.leftovers(appID: o["app"] as? String ?? "", packID: id, done: reply) }
+                case "uninstall": if need("apps.uninstall") { files.uninstall(appID: o["app"] as? String ?? "", ids: ids, packID: id, done: reply) }
+                case "scanClean": if need("files.clean") { files.scanClean(packID: id, done: reply) }
+                case "scanChats": if need("files.clean") { files.scanChats(days: (o["days"] as? NSNumber)?.intValue ?? 90, packID: id, done: reply) }
+                case "trash": if need("files.clean") || need("apps.uninstall") { files.trash(ids: ids, packID: id, done: reply) }
+                case "fullDiskAccess": if need("files.clean") { files.openFullDiskAccess() }
+                case "reminder":
+                    guard need("files.clean") else { break }
+                    if let value = o["set"] as? String { self.services.cleanReminder.set(value, packID: id) }
+                    return Self.jsonString(self.services.cleanReminder.schedule(id))
+                case "busy": return (files.busy.contains(id)) ? "true" : "false"
+                case "ports": if need("ports") { tools.ports(done: reply) }
+                case "stopPort":
+                    guard need("ports") else { break }
+                    return tools.stop(pid: (o["pid"] as? NSNumber)?.intValue ?? 0, force: o["force"] as? Bool ?? false) ? "true" : "false"
+                case "brewStatus": if need("homebrew") || need("updates.check") { return Self.jsonString(tools.brewStatus(packID: id)) }
+                case "brewRead": if need("homebrew") { tools.brewRead(o["what"] as? String ?? "", o["query"] as? String ?? "", done: reply) }
+                case "brewJob":
+                    if need("homebrew") { tools.brewJob(o["what"] as? String ?? "", name: o["name"] as? String, cask: o["cask"] as? Bool ?? false, packID: id, done: reply) }
+                case "cancelJob": if need("homebrew") || need("updates.check") { tools.cancelJob(packID: id) }
+                case "checkUpdates": if need("updates.check") { tools.checkUpdates(packID: id, done: reply) }
+                case "update": if need("updates.check") { tools.update(o["id"] as? String ?? "", packID: id, done: reply) }
+                default: break
+                }
+                return "null"
+            }
+        } as @convention(block) (String, String, Int) -> String)
+        // Keep-awake rules (SDK 8): apps, power, an external display.
+        define("awakeRules", { [weak self] (action: String, arg: String, callback: Int) -> String in
+            MainActor.assumeIsolated {
+                guard let self, self.capabilities.contains("power.awake") else { return "null" }
+                let rules = self.services.awakeRules
+                let packID = self.bundle.id
+                switch action {
+                case "get":
+                    let r = rules.rules(for: packID)
+                    return Self.jsonString([
+                        "apps": r.apps.map { ["id": $0, "name": AppNames.name($0)] },
+                        "onPower": r.onPower, "externalDisplay": r.externalDisplay, "display": r.display,
+                        "active": rules.activeReason(for: packID) as Any,
+                    ] as [String: Any])
+                case "set":
+                    guard let o = Self.jsonObject(arg) else { return "null" }
+                    var r = rules.rules(for: packID)
+                    if let apps = o["apps"] as? [String] { r.apps = Array(apps.prefix(50)) }
+                    if let v = o["onPower"] as? Bool { r.onPower = v }
+                    if let v = o["externalDisplay"] as? Bool { r.externalDisplay = v }
+                    if let v = o["display"] as? Bool { r.display = v }
+                    rules.set(r, for: packID, packName: self.bundle.manifest.name)
+                case "pickApp":
+                    let panel = NSOpenPanel()
+                    panel.allowedContentTypes = [.application]
+                    panel.directoryURL = URL(filePath: "/Applications")
+                    panel.level = .statusBar + 1
+                    self.services.holdPanel()
+                    NSApp.activate()
+                    panel.begin { [weak self] response in
+                        MainActor.assumeIsolated {
+                            self?.services.releasePanel()
+                            guard response == .OK, let url = panel.url, let id = Bundle(url: url)?.bundleIdentifier else {
+                                self?.respond(callback, NSNull()); return
+                            }
+                            self?.respond(callback, ["id": id, "name": AppNames.name(id)])
+                        }
+                    }
+                default: break
+                }
+                return "null"
+            }
+        } as @convention(block) (String, String, Int) -> String)
         define("base64Encode", { (s: String) -> String in PackNative.base64Encode(s) } as @convention(block) (String) -> String)
         define("base64Decode", { (s: String) -> Any in PackNative.base64Decode(s) ?? NSNull() } as @convention(block) (String) -> Any)
         define("sha256", { (s: String) -> String in PackNative.sha256(s) } as @convention(block) (String) -> String)
@@ -567,7 +661,8 @@ final class PackRuntime {
                 guard let self, allowed("clipboard.read") else { return "[]" }
                 return Self.jsonString(self.services.clipboard.items(packID: id, query: query).map { item in
                     ["id": item.id, "kind": item.kind, "text": item.text.map { String($0.prefix(2000)) } ?? NSNull(),
-                     "image": item.kind == "image" ? "clipboard:\(item.id)" : NSNull(), "width": item.width ?? 0, "height": item.height ?? 0,
+                     "image": item.kind != "text" ? "clipboard:\(item.id)" : NSNull(), "width": item.width ?? 0, "height": item.height ?? 0,
+                     "files": item.files?.count ?? 0,
                      "bytes": item.bytes, "app": item.app ?? NSNull(), "appName": item.appName ?? NSNull(),
                      "at": item.at.timeIntervalSince1970 * 1000, "pinned": item.pinned] as [String: Any]
                 })
@@ -579,6 +674,7 @@ final class PackRuntime {
                 let history = self.services.clipboard
                 switch action {
                 case "copy": return history.copy(packID: id, id: item)
+                case "paste": return allowed("clipboard.paste") && history.paste(packID: id, id: item)
                 case "pin": history.pin(packID: id, id: item, on)
                 case "remove": history.remove(packID: id, id: item)
                 case "clear": history.clear(packID: id)
@@ -615,6 +711,31 @@ final class PackRuntime {
                 return Self.jsonString(self.services.system.read())
             }
         } as @convention(block) () -> String)
+        // System (SDK 8): the graphs' history, and the network checks the person starts.
+        define("system", { [weak self] (action: String, callback: Int) -> String in
+            MainActor.assumeIsolated {
+                guard let self else { return "null" }
+                switch action {
+                case "history":
+                    guard allowed("system.stats") else { return "[]" }
+                    return Self.jsonString(SystemHistory.shared.json())
+                case "publicIP":
+                    guard allowed("network.test") else { return "null" }
+                    Task { [weak self] in
+                        let address = await NetworkTests.publicAddress()
+                        self?.respond(callback, ["address": address as Any])
+                    }
+                case "speedTest":
+                    guard allowed("network.test") else { return "null" }
+                    Task { [weak self] in
+                        let result = await NetworkTests.speedTest { _ in }
+                        self?.respond(callback, result.map { $0 as [String: Any] } ?? ["error": "The test couldn't reach the server"])
+                    }
+                default: break
+                }
+                return "null"
+            }
+        } as @convention(block) (String, Int) -> String)
         // Words (dictionary, SDK 4): read on demand from the dictionary and thesaurus in macOS.
         define("dictionary", { [weak self] (action: String, arg: String) -> String in
             MainActor.assumeIsolated {
@@ -652,13 +773,45 @@ final class PackRuntime {
                 switch action {
                 case "permission": return capture.hasPermission ? "true" : "false"
                 case "requestPermission": capture.requestPermission()
+                case "capture" where arg == "scrolling":
+                    capture.scrollingCapture(packID: id)
                 case "capture":
                     capture.capture(packID: id, mode: ScreenCapture.Mode(rawValue: arg) ?? .area) { [weak self] shot, error in
                         self?.respond(callback, shot.map { ["id": $0] as [String: Any] } ?? ["error": error ?? ""])
                     }
+                // SDK 7: the capture bar, text, colors, pins and recording.
+                case "openBar": capture.openBar(packID: id)
+                case "copyText": if allowed("screen.text") { self.services.hidePanel(); capture.copyText() }
+                case "pickColor": self.services.hidePanel(); capture.pickColor()
+                case "pin": if let shot = capture.shot(arg) { capture.pins.pin(shot.image, near: NSEvent.mouseLocation) }
+                case "record":
+                    guard allowed("screen.record") else { break }
+                    self.services.hidePanel()
+                    capture.recorder.start(packID: id, target: arg == "window" ? .window : arg == "screen" ? .screen : .area)
+                case "isRecording": return capture.recorder.isRecording ? "true" : "false"
+                case "stopRecording": capture.recorder.stop()
+                case "recordings":
+                    guard allowed("screen.record") else { break }
+                    return Self.jsonString(capture.recorder.recordings.map {
+                        ["id": $0.id, "at": $0.date.timeIntervalSince1970 * 1000, "clicks": $0.clicks.count] as [String: Any]
+                    })
+                case "openRecording":
+                    if allowed("screen.record"), let recording = capture.recorder.recording(arg) { capture.recorder.editors.open(recording) }
+                case "recordPrefs":
+                    let p = capture.recordPrefs(id)
+                    return Self.jsonString(["systemAudio": p.systemAudio, "microphone": p.microphone, "fps": p.fps, "pointer": p.showsPointer] as [String: Any])
+                case "setRecordPrefs":
+                    guard let o = Self.jsonObject(arg) else { break }
+                    var p = capture.recordPrefs(id)
+                    if let v = o["systemAudio"] as? Bool { p.systemAudio = v }
+                    if let v = o["microphone"] as? Bool { p.microphone = v }
+                    if let v = (o["fps"] as? NSNumber)?.intValue { p.fps = v == 30 ? 30 : 60 }
+                    if let v = o["pointer"] as? Bool { p.showsPointer = v }
+                    capture.setRecordPrefs(p, packID: id)
                 case "prefs":
                     let p = capture.prefs(id)
-                    return Self.jsonString(["delay": p.delay, "pointer": p.pointer, "sound": p.sound, "format": p.format, "autoCopy": p.autoCopy] as [String: Any])
+                    return Self.jsonString(["delay": p.delay, "pointer": p.pointer, "sound": p.sound, "format": p.format, "autoCopy": p.autoCopy,
+                                            "freeze": p.freeze, "shortcutAction": p.shortcutAction, "instantMode": p.instantMode] as [String: Any])
                 case "setPrefs":
                     guard let o = Self.jsonObject(arg) else { break }
                     var p = capture.prefs(id)
@@ -667,6 +820,9 @@ final class PackRuntime {
                     if let v = o["sound"] as? Bool { p.sound = v }
                     if let v = o["format"] as? String { p.format = v == "jpeg" ? "jpeg" : "png" }
                     if let v = o["autoCopy"] as? Bool { p.autoCopy = v }
+                    if let v = o["freeze"] as? Bool { p.freeze = v }
+                    if let v = o["shortcutAction"] as? String { p.shortcutAction = v == "instant" ? "instant" : "bar" }
+                    if let v = o["instantMode"] as? String { p.instantMode = ["area", "window", "screen"].contains(v) ? v : "area" }
                     capture.setPrefs(p, packID: id)
                 case "folder":
                     return Self.jsonString(["label": capture.folderLabel(id), "custom": capture.folder(id).custom] as [String: Any])
@@ -680,6 +836,33 @@ final class PackRuntime {
                 case "delete": capture.delete(arg)
                 case "canEdit": return self.services.imageEditor() == nil ? "false" : "true"
                 case "edit": if let editor = self.services.imageEditor() { self.services.openInEditor(editor, arg) }
+                default: break
+                }
+                return "null"
+            }
+        } as @convention(block) (String, String, Int) -> String)
+        // Media tools (media.convert, SDK 7): files come in by id only.
+        define("media", { [weak self] (action: String, arg: String, callback: Int) -> String in
+            MainActor.assumeIsolated {
+                guard let self, allowed("media.convert") else { return "null" }
+                let media = self.services.media
+                let o = Self.jsonObject(arg) ?? [:]
+                let reply: ([String: Any]) -> Void = { [weak self] result in self?.respond(callback, result) }
+                let ids = (o["ids"] as? [String]) ?? (o["id"] as? String).map { [$0] } ?? []
+                switch action {
+                case "pick":
+                    media.pick(kind: o["kind"] as? String ?? "images", multiple: o["multiple"] as? Bool ?? true, packID: id) { [weak self] files in
+                        self?.respond(callback, files)
+                    }
+                case "shrink": media.shrink(ids.first ?? "", quality: o["quality"] as? String ?? "medium", packID: id, done: reply)
+                case "gif": media.gif(ids.first ?? "", width: (o["width"] as? NSNumber)?.intValue ?? 720, fps: (o["fps"] as? NSNumber)?.intValue ?? 12, packID: id, done: reply)
+                case "convert": media.convert(ids, format: o["format"] as? String ?? "jpeg", packID: id, done: reply)
+                case "watermark":
+                    media.watermark(ids, text: o["text"] as? String ?? "", position: o["position"] as? String ?? "bottomRight",
+                                    opacity: (o["opacity"] as? NSNumber)?.doubleValue ?? 0.8, packID: id, done: reply)
+                case "status":
+                    guard let job = media.job else { return "null" }
+                    return Self.jsonString(["label": job.label, "progress": job.progress] as [String: Any])
                 default: break
                 }
                 return "null"
@@ -732,7 +915,8 @@ final class PackRuntime {
 
         let setup = context.evaluateScript(Self.prelude, withSourceURL: URL(string: "zephydian-sdk.js"))
         let input: String? = if case .window(let input) = mode { input } else { nil }
-        guard let result = setup?.call(withArguments: [native, bundle.manifest.kind, Array(capabilities).sorted(), input ?? NSNull()]),
+        guard let result = setup?.call(withArguments: [native, bundle.manifest.kind, Array(capabilities).sorted(), input ?? NSNull(),
+                                                       mode == .settings]),
               failure == nil else { return }
         sdk = result.objectForKeyedSubscript("sdk")
         // `z` and `zephydian` can't be replaced by the pack.
@@ -789,7 +973,7 @@ final class PackRuntime {
                 let screenshotPack = owner.packID ?? PackLibrary.shared.packs.first { $0.manifest.capabilities?.contains("screen.capture") == true }?.id ?? "screenshot"
                 return capture.save(shot, packID: screenshotPack).map { Self.jsonString([$0]) } ?? "null"
             case .file(let url):
-                // Not atomic: the sandbox lets the app write the file you picked, not make others next to it.
+                // Written in place (not atomically), so the file keeps its identity, like Preview does.
                 guard let data = PackImages.encode(image, format: url.pathExtension),
                       ["png", "jpg", "jpeg", "tif", "tiff"].contains(url.pathExtension.lowercased()),
                       (try? data.write(to: url)) != nil else { return "null" }
@@ -825,7 +1009,7 @@ final class PackRuntime {
 
     /// The SDK's JavaScript side. It checks and flattens what packs pass in, so Swift only sees plain values.
     private static let prelude = #"""
-    (function (N, KIND, CAPS, INPUT) {
+    (function (N, KIND, CAPS, INPUT, SETTINGS) {
       "use strict";
       const num = v => (typeof v === "number" && isFinite(v)) ? v : 0;
       const col = v => (typeof v === "string" && v.length < 64) ? v : null;
@@ -1053,6 +1237,7 @@ final class PackRuntime {
           record(on) { need("clipboard.read"); N.clipRecord(!!on); },
           items(o = {}) { need("clipboard.read"); return JSON.parse(N.clipItems(text(o && o.query))); },
           copy(id) { need("clipboard.read"); return N.clipControl("copy", text(id), false); },
+          paste(id) { need("clipboard.read"); need("clipboard.paste"); return N.clipControl("paste", text(id), false); },
           pin(id, on) { need("clipboard.read"); N.clipControl("pin", text(id), !!on); },
           remove(id) { need("clipboard.read"); N.clipControl("remove", text(id), false); },
           clear() { need("clipboard.read"); N.clipControl("clear", "", false); },
@@ -1082,10 +1267,36 @@ final class PackRuntime {
             delete(id) { S("delete", text(id)); },
             canEdit() { return S("canEdit"); },
             edit(id) { S("edit", text(id)); },
+            // SDK 7
+            openBar() { S("openBar"); },
+            copyText() { need("screen.text"); S("copyText"); },
+            pickColor() { S("pickColor"); },
+            pin(id) { S("pin", text(id)); },
+            record(target) { need("screen.record"); S("record", text(target || "area")); },
+            isRecording() { return S("isRecording"); },
+            stopRecording() { S("stopRecording"); },
+            recordings() { need("screen.record"); return S("recordings") || []; },
+            openRecording(id) { need("screen.record"); S("openRecording", text(id)); },
+            recordPrefs() { return S("recordPrefs"); },
+            setRecordPrefs(o) { S("setRecordPrefs", JSON.stringify(o || {})); },
+          });
+        })(),
+        media: (() => {
+          const M = (action, o, done) => { need("media.convert"); return JSON.parse(N.media(action, JSON.stringify(o || {}), later(done))); };
+          return Object.freeze({
+            pick(kind, done, multiple) { M("pick", { kind: text(kind || "images"), multiple: multiple !== false }, done); },
+            shrink(id, quality, done) { M("shrink", { id: text(id), quality: text(quality || "medium") }, done); },
+            gif(id, o, done) { M("gif", Object.assign({ id: text(id) }, o || {}), done); },
+            convert(ids, format, done) { M("convert", { ids: (ids || []).map(text), format: text(format || "jpeg") }, done); },
+            watermark(ids, o, done) { M("watermark", Object.assign({ ids: (ids || []).map(text) }, o || {}), done); },
+            status() { return M("status"); },
           });
         })(),
         system: Object.freeze({
           stats() { need("system.stats"); return JSON.parse(N.systemStats()); },
+          history() { need("system.stats"); return JSON.parse(N.system("history", 0)); },
+          publicIP(done) { need("network.test"); N.system("publicIP", later(done)); },
+          speedTest(done) { need("network.test"); N.system("speedTest", later(done)); },
         }),
         window: Object.freeze({
           isWindow: INPUT != null,
@@ -1124,10 +1335,62 @@ final class PackRuntime {
             discard(id) { I("discard", text(id)); },
           });
         })(),
+        apps: (() => {
+          const T = (action, o, done) => { need("apps.uninstall"); return JSON.parse(N.tools(action, JSON.stringify(o || {}), later(done))); };
+          return Object.freeze({
+            list(done) { T("apps", {}, done); },
+            choose(done) { T("chooseApp", {}, done); },
+            leftovers(app, done) { T("leftovers", { app: text(app) }, done); },
+            uninstall(app, ids, done) { T("uninstall", { app: text(app), ids: (ids || []).map(text) }, done); },
+          });
+        })(),
+        clean: (() => {
+          const T = (action, o, done) => { need("files.clean"); return JSON.parse(N.tools(action, JSON.stringify(o || {}), later(done))); };
+          return Object.freeze({
+            scan(done) { T("scanClean", {}, done); },
+            chats(days, done) { T("scanChats", { days: num(days) }, done); },
+            trash(ids, done) { T("trash", { ids: (ids || []).map(text) }, done); },
+            busy() { return JSON.parse(N.tools("busy", "{}", 0)); },
+            reminder(value) { return T("reminder", value == null ? {} : { set: text(value) }); },
+            openFullDiskAccess() { T("fullDiskAccess"); },
+          });
+        })(),
+        ports: Object.freeze({
+          list(done) { need("ports"); N.tools("ports", "{}", later(done)); },
+          stop(pid, force) { need("ports"); return JSON.parse(N.tools("stopPort", JSON.stringify({ pid: num(pid), force: !!force }), 0)); },
+        }),
+        brew: (() => {
+          const T = (action, o, done) => { need("homebrew"); return JSON.parse(N.tools(action, JSON.stringify(o || {}), later(done))); };
+          return Object.freeze({
+            status() { return T("brewStatus"); },
+            search(query, done) { T("brewRead", { what: "search", query: text(query) }, done); },
+            installed(done) { T("brewRead", { what: "installed" }, done); },
+            outdated(done) { T("brewRead", { what: "outdated" }, done); },
+            install(name, cask, done) { T("brewJob", { what: "install", name: text(name), cask: !!cask }, done); },
+            uninstall(name, cask, done) { T("brewJob", { what: "uninstall", name: text(name), cask: !!cask }, done); },
+            upgrade(name, cask, done) { T("brewJob", { what: "upgrade", name: text(name), cask: !!cask }, done); },
+            update(done) { T("brewJob", { what: "update" }, done); },
+            upgradeAll(done) { T("brewJob", { what: "upgradeAll" }, done); },
+            cleanup(done) { T("brewJob", { what: "cleanup" }, done); },
+            cancel() { T("cancelJob"); },
+          });
+        })(),
+        updates: (() => {
+          const T = (action, o, done) => { need("updates.check"); return JSON.parse(N.tools(action, JSON.stringify(o || {}), later(done))); };
+          return Object.freeze({
+            check(done) { T("checkUpdates", {}, done); },
+            update(id, done) { T("update", { id: text(id) }, done); },
+            status() { return T("brewStatus"); },
+            cancel() { T("cancelJob"); },
+          });
+        })(),
         awake: Object.freeze({
           start(o = {}) { need("power.awake"); return N.awakeStart(num(o && o.minutes), !!(o && o.display)); },
           stop() { need("power.awake"); N.awakeStop(); },
           status() { need("power.awake"); return JSON.parse(N.awakeStatus()); },
+          rules() { need("power.awake"); return JSON.parse(N.awakeRules("get", "", 0)); },
+          setRules(o) { need("power.awake"); N.awakeRules("set", JSON.stringify(o || {}), 0); },
+          pickApp(done) { need("power.awake"); N.awakeRules("pickApp", "", later(done)); },
         }),
       };
       Object.seal(z);
@@ -1143,7 +1406,11 @@ final class PackRuntime {
           if (KIND !== "utility") throw new Error('this pack is a game: call zephydian.game() (or set "kind": "utility")');
           if (game) throw new Error("zephydian.utility() was called twice");
           if (!u || typeof u !== "object" || typeof u.view !== "function") throw new TypeError("zephydian.utility() needs an object with view()");
-          if (INPUT != null) {
+          if (SETTINGS) {
+            // The utility's page in the Settings window (SDK 5): the settings object takes its place.
+            if (!u.settings || typeof u.settings.view !== "function") return;
+            game = u.settings;
+          } else if (INPUT != null) {
             // Running in the pack's own window: the window object takes the utility's place.
             if (!u.window || typeof u.window.view !== "function") return;
             game = u.window;
@@ -1168,6 +1435,7 @@ final class PackRuntime {
         },
         setTheme(t) { z.theme = Object.freeze(t); },
         start: () => { call("start", z.window.input); },
+        storageChanged: () => { call("storageChanged"); },
         draw: () => { const g = new Draw(); call("draw", g); return g._c; },
         tick: dt => { call("tick", dt); },
         key: e => call("key", Object.freeze(e)) === true,

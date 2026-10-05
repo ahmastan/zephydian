@@ -27,7 +27,7 @@ struct NoteMatch: Identifiable, Equatable {
 
 /// Quick Notes storage. Each tab is a plain Markdown file you can open in any editor:
 ///
-///     ~/Library/Containers/com.ahmastan.zephydian/Data/Library/Application Support/Zephydian/Notes/
+///     ~/Library/Application Support/Zephydian/Notes/
 ///         Scratch.md
 ///         Todo.md
 ///         notes.json        ← tab order, which tab is active, floating (pinned) notes, preview

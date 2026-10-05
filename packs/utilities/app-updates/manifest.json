@@ -1,0 +1,11 @@
+{
+  "id": "app-updates",
+  "name": "App Updates",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 9,
+  "description": "One list of updates for your apps: App Store, Homebrew and apps' own updaters.",
+  "symbol": "arrow.down.app",
+  "capabilities": ["updates.check"],
+  "whatsNew": "First release."
+}

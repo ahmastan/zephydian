@@ -2,10 +2,11 @@
   "id": "clipboard",
   "name": "Clipboard",
   "kind": "utility",
-  "version": "1.0.0",
-  "sdkVersion": 2,
-  "description": "A private history of what you copy: search it, pin favorites, copy again.",
+  "version": "1.2.0",
+  "sdkVersion": 6,
+  "description": "A private history of what you copy: search it, pin favorites, paste again.",
   "symbol": "doc.on.clipboard",
-  "capabilities": ["clipboard.read", "shortcut"],
-  "whatsNew": "First release."
+  "capabilities": ["clipboard.read", "clipboard.paste", "shortcut"],
+  "whatsNew": "Click an item (or press 1–9) to paste it straight into the app you were in. Copied files are kept too, with previews.",
+  "settings": true
 }

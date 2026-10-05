@@ -70,6 +70,8 @@ struct CornerPicker: View {
     var width: CGFloat = 132
     var height: CGFloat = 84
     var dot: CGFloat = 20
+    /// Glass on the selected dot. The panel's controls follow the panel style; the Settings window's rows are content, so no glass.
+    var glass: Bool?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(SettingsStore.self) private var settings
 
@@ -101,7 +103,7 @@ struct CornerPicker: View {
 
     /// The selected corner is accent-tinted glass in Liquid Glass mode (solid accent in Frosted).
     @ViewBuilder private func dotView(selected: Bool) -> some View {
-        if selected, settings.usesGlass {
+        if selected, glass ?? settings.usesGlass {
             Circle().fill(.clear)
                 .glassSurface(in: Circle(), tint: settings.accentColor, fallback: .tint)
         } else {

@@ -75,6 +75,12 @@ The built-in games (Snake, Stackr, Five and the others) live in `app/Zephydian/F
 4. Add a line under **Unreleased** in [CHANGELOG.md](CHANGELOG.md).
 5. Fill out the PR template, and include a screenshot or GIF for UI changes.
 
+## License of contributions
+
+Zephydian is licensed under the [GNU General Public License v3.0 or later](LICENSE). By sending a pull request, you agree that your contribution is shared under that license.
+
+The app switcher and Finder cut and paste in `app/SwitcherKit/` are copied from [Vorssaint](https://github.com/vorssaint/vorssaint-utils) (GPL-3.0-or-later). When you change one of those files, keep its copyright and license lines and update the note at its top that says what Zephydian changed. That package keeps Vorssaint's own Swift settings (Swift 5 mode), unlike the app.
+
 ## Reporting bugs and suggesting ideas
 
 Use the issue templates: **Bug report**, **Feature request**, **Utility idea**, or **Game idea**. For security issues, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.

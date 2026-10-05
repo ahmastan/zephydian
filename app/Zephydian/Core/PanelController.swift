@@ -33,6 +33,8 @@ final class FloatingPanel: NSPanel {
 final class PanelController: NSObject {
     var onVisibilityChange: (Bool) -> Void = { _ in }
     private(set) var isOpen = false
+    /// Whether the pointer is over the panel right now.
+    var containsPointer: Bool { isOpen && panel.frame.contains(NSEvent.mouseLocation) }
 
     private let panel: FloatingPanel
     private let settings: SettingsStore
@@ -117,6 +119,7 @@ final class PanelController: NSObject {
         cancelAutoHide()
         stopClickMonitor()
         notes.flush()
+        model.closeShelf()   // the next opening shows the tabs (the Shelf keeps its items)
         model.gameSession?.pause()
         animateCorner(opening: false) { [weak self] in
             guard let self, !self.isOpen else { return }
@@ -233,6 +236,7 @@ final class PanelController: NSObject {
 
     func finishOnboarding() {
         settings.hasCompletedOnboarding = true
+        settings.featuresIntroSeen = true
         hide()
         Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(160))
@@ -449,7 +453,8 @@ final class PanelController: NSObject {
         }
         guard !model.isOnboarding else { return false }
         switch key {
-        case "1", "2", "3", "4", ",":
+        case ",": model.openSettingsWindow(nil)   // ⌘, is the Settings window, as in every Mac app; ⌘4 is the short tab
+        case "1", "2", "3", "4":
             if model.isShowingGame { model.closeGame() }
             model.closeLibrary()
             model.closeStats()
@@ -474,7 +479,7 @@ final class PanelController: NSObject {
     }
 }
 
-private extension NSImage {
+extension NSImage {
     /// A stretchable rounded-rectangle mask, used to round the blurred background's corners.
     static func roundedMask(radius: CGFloat) -> NSImage {
         let edge = radius * 2 + 1

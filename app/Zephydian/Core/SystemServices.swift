@@ -20,7 +20,6 @@ enum LaunchAtLogin {
 }
 
 /// Reads macOS's own Hot Corners setting so we can warn about clashes.
-/// (Needs the read-only `com.apple.dock` entitlement in project.yml.)
 enum HotCorners {
     static func hasSystemAction(at corner: Corner) -> Bool {
         let key = "wvous-\(corner.rawValue)-corner" as CFString

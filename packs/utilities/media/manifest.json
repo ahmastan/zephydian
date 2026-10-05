@@ -1,0 +1,11 @@
+{
+  "id": "media",
+  "name": "Media",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 7,
+  "description": "Shrink videos, convert and watermark images, and make GIFs, all on your Mac.",
+  "symbol": "photo.on.rectangle.angled",
+  "capabilities": ["media.convert"],
+  "whatsNew": "First release."
+}

@@ -189,7 +189,7 @@ final class PackManager {
     /// Downloads, verifies and installs a pack, replacing an older version. If anything fails,
     /// the previous version stays exactly as it was.
     func install(_ entry: PackCatalog.Entry) async {
-        guard installing[entry.id] == nil else { return }
+        guard installing[entry.id] == nil, PackManifest.isValidID(entry.id) else { return }
         guard entry.sdkVersion <= PackBundle.sdkVersion else {
             errors[entry.id] = "Update Zephydian to install this."
             return
@@ -242,10 +242,12 @@ final class PackManager {
 
     /// Removes a pack. Its saved games and best scores stay for a reinstall unless `deleteProgress`.
     func uninstall(_ id: String, deleteProgress: Bool) {
+        guard PackManifest.isValidID(id) else { return }
         PackServices.shared.removeData(for: id)
         try? FileManager.default.removeItem(at: directory.appending(path: id, directoryHint: .isDirectory))
         if deleteProgress {
             try? FileManager.default.removeItem(at: dataDirectory.appending(path: "\(id).json"))
+            PackStorage.forget(packID: id)
             defaults.removeObject(forKey: "pack.\(id).best")
             defaults.removeObject(forKey: "pack.\(id).bestTime")
         }
@@ -284,6 +286,13 @@ final class PackManager {
         guard !installed.isEmpty else { return }
         await loadCatalog()
         guard catalogState == .loaded else { return }
+        await installUpdates()
+    }
+
+    /// Installs every update in the loaded catalog (a pack that's in use waits until it's closed).
+    /// Also run when the Library opens, since it has just fetched the list anyway.
+    func installUpdates() async {
+        guard catalogState == .loaded, !installed.isEmpty else { return }
         lastChecked = Date()
         defaults.set(lastChecked, forKey: "packs.lastChecked")
         for id in installed.keys.sorted() where hasUpdate(id) {
