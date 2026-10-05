@@ -2,7 +2,7 @@
 
 New games and utilities come to Zephydian as **packs**. People install them from the **Library** inside the panel, and can remove them again. A pack is a small JavaScript program plus its data. Zephydian runs it with Apple's built-in JavaScriptCore and draws it natively, so a pack looks and feels like the rest of the app, Liquid Glass included.
 
-This guide covers **SDK version 3**. Version 1 brought games. Version 2 added **utilities**, whose screens are built from native controls, and **capabilities** for the few things a utility needs beyond its own screen (the clipboard, keeping the Mac awake and so on). Version 3 lets a utility open **its own window** and **edit images**, with a canvas that takes the pointer.
+This guide covers **SDK version 9** (Zephydian 0.7). Version 1 brought games. Version 2 added **utilities**, whose screens are built from native controls, and **capabilities** for the few things a utility needs beyond its own screen (the clipboard, keeping the Mac awake and so on). Version 3 lets a utility open **its own window** and **edit images**, with a canvas that takes the pointer. Version 4 added words and copied text, version 5 **settings pages** in Zephydian's Settings window, and versions 6 to 9 added capabilities for pasting, screen recording and media, system figures and the network test, and app management (see [Capabilities](#capabilities)). The `center` option for a utility's start page is new in 0.7 too.
 
 - [What a pack can and can't do](#what-a-pack-can-and-cant-do)
 - [Folder layout](#folder-layout)
@@ -15,6 +15,7 @@ This guide covers **SDK version 3**. Version 1 brought games. Version 2 added **
 - [Capabilities](#capabilities)
 - [Windows and image editing (SDK 3)](#windows-and-image-editing-sdk-3)
 - [Words and copied text (SDK 4)](#words-and-copied-text-sdk-4)
+- [Settings pages (SDK 5)](#settings-pages-sdk-5)
 - [A complete example](#a-complete-example)
 - [Testing your pack](#testing-your-pack)
 - [Submitting a pack](#submitting-a-pack)
@@ -91,6 +92,7 @@ Only these files are allowed: `manifest.json`, `main.js`, `icon.png`, and PNG, J
 | `symbol` | Optional. An SF Symbol name (for example `"doc.on.clipboard"`) used as the icon instead of `icon.png`. Meant for utilities. |
 | `capabilities` | Optional (SDK 2). What the pack uses beyond its own screen and storage, such as `["clipboard.write"]`. See [Capabilities](#capabilities). |
 | `handles` | Optional (SDK 3, utilities). `["image"]` makes the utility the editor behind a screenshot's Edit button. It needs the `windows` and `images.edit` capabilities. |
+| `settings` | Optional (SDK 5, utilities). `true` gives the utility a page in Zephydian's Settings window. See [Settings pages](#settings-pages-sdk-5). |
 
 ## The game object
 
@@ -223,6 +225,8 @@ zephydian.utility({
   pause()  { },          // the panel hid
   resume() { },          // it's back on screen
   shortcut() { },        // SDK 4: opened with its own keyboard shortcut (the `shortcut` capability)
+  storageChanged() { },  // SDK 5: its settings page (or window) saved something; reload what you keep in memory
+  settings: { view() { } },  // SDK 5: its page in the Settings window (see Settings pages)
 });
 ```
 
@@ -240,10 +244,10 @@ Utilities have no pause button or cards; `z.menu()`, `z.toast()`, `z.hint()`, `z
 | `z.ui.segmented(options, selected, onChange(index))` | A few choices side by side. |
 | `z.ui.picker(label, options, selected, onChange(index))` | A pop-up menu for longer lists of choices. |
 | `z.ui.copy(text, { label, concealed })` | A Copy button. Copying from a button someone clicks needs no capability. `concealed: true` marks the text so clipboard histories skip it (for passwords). |
-| `z.ui.row(children, { spacing, align })`, `z.ui.column(children, { spacing, align })` | Lay controls out side by side or top to bottom. |
+| `z.ui.row(children, { spacing, align })`, `z.ui.column(children, { spacing, align, center })` | Lay controls out side by side or top to bottom. `center: true` on the control `view()` returns puts it in the middle of the page (a start page with one button); older apps show it at the top. |
 | `z.ui.flow(children, { spacing })` | SDK 4. Side by side, wrapping onto more lines when they don't fit, like tags. |
 | `z.ui.section(title, children)` | A group on a rounded card, like the sections in Settings. `title` can be `null`. |
-| `z.ui.list(items, { selected, onSelect(id), onAction(id, index), empty })` | Rows. Each item is `{ id, title, subtitle, detail, symbol, image, actions: [{ symbol, label }] }`; `image` (a clipboard history picture) shows a small thumbnail instead of the symbol. `onAction` gets the row id and which action button was clicked. `empty` is shown when there are no items. |
+| `z.ui.list(items, { selected, onSelect(id), onAction(id, index), empty })` | Rows. Each item is `{ id, title, subtitle, detail, symbol, image, actions: [{ symbol, label }] }`; `image` (a clipboard history picture) shows a small thumbnail instead of the symbol; SDK 9 adds `"app:<bundle id>"` for an installed app's icon. `onAction` gets the row id and which action button was clicked. `empty` is shown when there are no items. |
 | `z.ui.canvas({ width, height, draw(g, width, height) })` | A small drawing area using the same drawing API as games (a QR code, a chart, a color wheel). |
 | `z.ui.swatch(color, { size, selected, onPress, accessibilityLabel })` | A color square. With `onPress` it's clickable; `selected: true` rings it in the accent color. Give clickable swatches an `accessibilityLabel` (for example the hex value) for VoiceOver. |
 | `z.ui.disclosure(label, expanded, onToggle(open), children)` | A row with a chevron that shows or hides `children`. The pack keeps `expanded`, so start it `false` to hide the contents by default. |
@@ -297,15 +301,22 @@ A capability is something a pack may do beyond its own screen and storage. Each 
 | Capability | What people see | API |
 | --- | --- | --- |
 | `clipboard.write` | Copy text to your clipboard | `z.clipboard.write(text, { concealed })`; `z.clipboard.writeImage(drawing)` copies a drawing as an image (returns `true` if it worked) |
-| `power.awake` | Keep your Mac awake, in the background while it's switched on | `z.awake.start({ minutes, display })` (no `minutes` = until stopped; `display: true` keeps the screen on too), `z.awake.stop()`, `z.awake.status()` → `{ on, until }` (`until` in milliseconds since 1970, or `null`) |
+| `power.awake` | Keep your Mac awake, in the background while it's switched on | `z.awake.start({ minutes, display })` (no `minutes` = until stopped; `display: true` keeps the screen on too), `z.awake.stop()`, `z.awake.status()` → `{ on, until }` (`until` in milliseconds since 1970, or `null`). SDK 8 adds rules that keep the Mac awake by themselves, watched by Zephydian with the panel closed: `z.awake.rules()` → `{ apps: [{ id, name }], onPower, externalDisplay, display, active }` (`active` is why a rule holds right now, or `null`), `z.awake.setRules({ apps, onPower, externalDisplay, display })` (any subset; `apps` are bundle ids), `z.awake.pickApp(done)` (macOS's open dialog in Applications; `done({ id, name })` or `done(null)`). |
 | `files.save` | Save files to a place you choose | `z.files.save({ name, text }, done)` or `z.files.save({ name, image: drawing }, done)`. macOS's save dialog asks where; `done(saved)` gets `true` or `false`. The pack never learns where the file went. |
 | `color.sample` | Read the color of a spot on the screen you pick | `z.color.sample(done)` shows macOS's color loupe; `done(color)` gets `{ hex, r, g, b, a }` (sRGB, 0–255), or `null` if the person pressed Esc. |
 
 | `timers` | Run timers in the background and play a sound when they end | `z.timers.start({ label, seconds, sound, chain })` → id. `chain` is a list of `{ label, seconds }` phases that start one after another (a focus cycle). `z.timers.list()` → `[{ id, label, seconds, paused, endsAt, remaining, phase, phases, sound }]` (times in ms), `z.timers.pause(id)`, `resume(id)`, `cancel(id)`, `z.timers.finished()` → the last day's `{ label, at }`, `z.timers.sounds()` and `z.timers.preview(sound)`. Timers are kept if Zephydian quits. |
 | `notifications` | Show notifications (macOS asks you first) | With `timers`: a notification when each timer ends. |
-| `clipboard.read` | Read what you copy, in the background while it's switched on | `z.history.record(on)`, `z.history.recording()`, `z.history.items({ query })` → `[{ id, kind, text, image, width, height, appName, at, pinned }]`, `z.history.copy(id)`, `pin(id, on)`, `remove(id)`, `clear()` (keeps pinned), `apps()` and `ignore(appID, on)`. Zephydian records text and images (never files, and never what password managers mark private), keeps the last 200 plus pinned items on this Mac, and deletes them when the pack is removed. Show an item's picture with a list row's `image`. |
-| `shortcut` | Open itself with a keyboard shortcut you choose | Put `z.ui.shortcut(label)` in your view: a field where the person records any key combination, with a warning under it if macOS, most apps' menus, another Zephydian shortcut or another app already uses it. `z.shortcut.get()` → the label (like "⌥⇧4") or `null`, `z.shortcut.clear()`. Pressing it opens the panel on the pack, then (SDK 4) calls its `shortcut()`. |
-| `system.stats` | Read CPU, memory, disk, battery and network use | `z.system.stats()` → `{ cpu: { user, system, cores }, memory: { used, total, pressure }, disk: { free, total }, battery: { present, level, charging, pluggedIn, minutesLeft, minutesToFull }, network: { in, out }, uptime }`. CPU and network (bytes per second) are measured since the previous call, so call it on a steady loop, only while on screen. There are no per-app figures. |
+| `clipboard.read` | Read what you copy, in the background while it's switched on | `z.history.record(on)`, `z.history.recording()`, `z.history.items({ query })` → `[{ id, kind, text, image, files, width, height, appName, at, pinned }]`, `z.history.copy(id)` (false if a copied file is gone), `pin(id, on)`, `remove(id)`, `clear()` (keeps pinned), `apps()` and `ignore(appID, on)`. Zephydian records text, images and (SDK 6) copied files (`kind` `"file"`: only where the files are is kept, and `text` names them), never what password managers mark private, keeps the last 200 plus pinned items on this Mac, and deletes them when the pack is removed. Show an item's picture (or a file's icon) with a list row's `image`. |
+| `clipboard.paste` | Paste into the app you're using (SDK 6) | `z.history.paste(id)`: puts the item on the clipboard, closes the panel and pastes it into the app that was in front. It needs `clipboard.read` too, and macOS's Accessibility permission (asked for the first time; until then the item is only copied). |
+| `shortcut` | Open itself with a keyboard shortcut you choose | Put `z.ui.shortcut(label)` in your view (SDK 5: in your settings view): a field where the person records any key combination, with a warning under it if macOS, most apps' menus, another Zephydian shortcut or another app already uses it. `z.shortcut.get()` → the label (like "⌥⇧4") or `null`, `z.shortcut.clear()`. Pressing it opens the panel on the pack, then (SDK 4) calls its `shortcut()`. The same shortcut is also listed on the Settings window's Shortcuts page. |
+| `system.stats` | Read CPU, memory, disk, battery and network use | `z.system.stats()` → `{ cpu: { user, system, cores }, memory: { used, total, pressure }, disk: { free, total }, battery: { present, level, charging, pluggedIn, minutesLeft, minutesToFull }, network: { in, out }, uptime }`. CPU and network (bytes per second) are measured since the previous call, so call it on a steady loop, only while on screen. SDK 8 adds `gpu` (percent), `temperatures: { cpu, battery, ssd }` (°C, where the Mac has the sensors), `fans` (rpm, Macs with fans), `watts` (the whole Mac's power use), battery `healthPercent`, `cycles`, `systemWatts`, `adapterWatts`, `addresses` (the Mac's local IPv4 addresses) and `apps` (the busiest apps over the last reading: `[{ name, cpu }]`, helpers counted with their app, 100 = one core), plus `z.system.history()` → the last ten minutes of readings `[{ t (seconds ago), cpu, memory, gpu, in, out, temp }]`. |
+| `apps.uninstall` | List your installed apps and move an app and its leftover files to the Trash, after you review them (SDK 9) | `z.apps.list(done)` → `[{ id, name, version, apple, running, size }]` (`size` in bytes, `null` until measured in the background; call again to get it), `z.apps.choose(done)` (macOS's open dialog; `{ id, name }` or `null`), `z.apps.leftovers(id, done)` → `[{ id, label, size, kind }]` (`kind`: `"app"` for the app itself, `"data"` for its files in the Library), `z.apps.uninstall(appID, itemIDs, done)` → `{ moved, failed }` (quits the app first; macOS's own apps and Zephydian are refused). Paths are never shown to the pack, only labels. |
+| `files.clean` | Find caches, logs, leftovers and old chat and download files, and move the ones you choose to the Trash (SDK 9) | `z.clean.scan(done)` → `[{ id, title, note, selected, size, count, items: [{ id, label, size }] }]`, `z.clean.chats(days, done)` → `[{ app, size, count, blocked, ids }]` (`blocked`: macOS protects it until Full Disk Access; `z.clean.openFullDiskAccess()`), `z.clean.trash(ids, done)` → `{ moved, failed }` (only ids from this pack's last scan), `z.clean.reminder()` / `z.clean.reminder("off" \| "weekly" \| "monthly")` (a notification with how much could be cleaned; nothing moves by itself). Everything goes to the Trash. |
+| `ports` | See which apps are listening on network ports, and stop them (SDK 9) | `z.ports.list(done)` → `[{ port, address, pid, name, app, canStop }]` (TCP, listening), `z.ports.stop(pid, force)` → `true` if the signal was sent (`force: false` asks it to quit, `true` ends it; only the person's own processes). |
+| `homebrew` | Search, install, upgrade and remove Homebrew packages, and run its maintenance (SDK 9) | `z.brew.status()` → `{ installed, job }` (`job`: `{ label, lines, running, ok }`, the running or last command with its output), `search(query, done)` → `{ formulae, casks }`, `installed(done)` → `{ items: [{ name, version, cask }] }`, `outdated(done)`, `install(name, cask, done)`, `uninstall(…)`, `upgrade(…)`, `update(done)`, `upgradeAll(done)`, `cleanup(done)` (one job at a time; `done({ ok })` or `done({ error })`), `cancel()`. |
+| `updates.check` | Check your apps for updates online (App Store, Homebrew and the apps' own update feeds) (SDK 9) | `z.updates.check(done)` → `[{ id, name, installed, latest, source }]` (`source`: `"appstore"`, `"brew"` or `"app"` for a Sparkle feed), `z.updates.update(id, done)` (Homebrew: upgrades it as a job, see `status()`; App Store: opens its page; others: opens the app so its updater runs), `status()`, `cancel()`. |
+| `network.test` | Look up your public IP address and run a speed test when you ask (uses the internet; SDK 8) | `z.system.publicIP(done)` → `done({ address })` (from ipify.org); `z.system.speedTest(done)` → `done({ download, upload, latency })` in Mbps and ms, or `done({ error })` (Cloudflare's speed test, about 25 MB down and 10 MB up). Only call these from a button the person clicks. |
 
 A **drawing** for images is `{ width, height, scale, draw(g, width, height) }`, using the same drawing API as games. `scale` (1–4, default 2) is pixels per point. Theme colors aren't meaningful outside the panel, so exported drawings should use fixed colors like `"#000000"`.
 
@@ -313,7 +324,10 @@ A **drawing** for images is `{ width, height, scale, draw(g, width, height) }`, 
 | `clipboard.text` | Read the text you've copied, only while it's on screen | `z.clipboard.readText()` → the text on the clipboard (up to 2,000 characters), or `null`. It gives `null` while the utility is off screen. SDK 4. |
 | `windows` | Open its own window (Zephydian shows in the Dock while it's open) | See [Windows and image editing](#windows-and-image-editing-sdk-3). SDK 3. |
 | `images.edit` | Open your screenshots, an image you pick or one you paste, and save the edited copy where you choose | `z.images`, see [Windows and image editing](#windows-and-image-editing-sdk-3). SDK 3. |
-| `screen.capture` | Take pictures of your screen (macOS asks you first) and save them in Pictures/Screenshots or a folder you choose | `z.screen.capture(mode, done)` with `"area"`, `"window"` or `"screen"`: Zephydian hides the panel, shows its own selection (Esc cancels), waits the delay, captures (leaving its own windows out) and shows a preview card with Copy, Save, Edit and Close; left alone, the shot is copied. `done({ id })` or `done({ error })`. `z.screen.permission()`, `requestPermission()`, `prefs()` / `setPrefs({ delay, pointer, sound, format, autoCopy })` (delay 0, 3, 5 or 10; format `"png"` or `"jpeg"`; `autoCopy` copies every shot as soon as it's taken), `folder()` → `{ label, custom }`, `chooseFolder(done)`, `resetFolder()`, `openFolder()`, `shots()` → this session's `[{ id, width, height, at, saved, image }]`, `copy(id)`, `save(id)` → file name, `saveAs(id, done)`, `delete(id)` (a saved file goes to the Trash), `canEdit()` and `edit(id)` (opens the installed image editor, such as Markup, in its own window). A pack with `shortcut` and `screen.capture` takes an Area screenshot when its shortcut is pressed. |
+| `screen.capture` | Take pictures of your screen (macOS asks you first) and save them in Pictures/Screenshots or a folder you choose | `z.screen.capture(mode, done)` with `"area"`, `"window"` or `"screen"`: Zephydian hides the panel, shows its own selection (Esc cancels), waits the delay, captures (leaving its own windows out) and shows a preview card with Copy, Save, Edit and Close; left alone, the shot is copied. `done({ id })` or `done({ error })`. `z.screen.permission()`, `requestPermission()`, `prefs()` / `setPrefs({ delay, pointer, sound, format, autoCopy })` (delay 0, 3, 5 or 10; format `"png"` or `"jpeg"`; `autoCopy` copies every shot as soon as it's taken), `folder()` → `{ label, custom }`, `chooseFolder(done)`, `resetFolder()`, `openFolder()`, `shots()` → this session's `[{ id, width, height, at, saved, image }]`, `copy(id)`, `save(id)` → file name, `saveAs(id, done)`, `delete(id)` (a saved file goes to the Trash), `canEdit()` and `edit(id)` (opens the installed image editor, such as Markup, in its own window). SDK 7 adds `capture("scrolling", …)` (Zephydian scrolls the selected area and stitches one tall picture; needs Accessibility), `openBar()` (the capture bar: Screenshot · Record · Copy Text · Color, keys 1–4, with a pixel magnifier while selecting), `pickColor()` (click a pixel; its hex is copied) and `pin(id)` (the shot floats on top). A pack with `shortcut` and `screen.capture` opens the capture bar when its shortcut is pressed. |
+| `screen.record` | Record your screen, and if switched on your Mac's sound and microphone (SDK 7; macOS asks first) | `z.screen.record("area" \| "window" \| "screen")`: Zephydian records with a small pill (time, Stop, discard; the capture shortcut also stops), then opens the recording in its editor (trim, cut out parts, blur boxes, zoom on clicks, save as MP4 or GIF). `isRecording()`, `stopRecording()`, `recordings()` → this session's `[{ id, at, clicks }]`, `openRecording(id)`, `recordPrefs()` / `setRecordPrefs({ systemAudio, microphone, fps, pointer })` (fps 30 or 60; the microphone needs macOS 15). |
+| `screen.text` | Read the text in an area of the screen you select (SDK 7) | `z.screen.copyText()`: select an area; its text (or a QR code's contents) is recognized on the Mac and copied, with a note on screen. |
+| `media.convert` | Open videos and images you pick, and save converted copies where you choose (SDK 7) | `z.media.pick(kind, done, multiple)` (`"video"` or `"images"`; `done([{ id, name, size }])`, paths are never shown), `shrink(id, "small" \| "medium" \| "large", done)`, `gif(id, { width, fps }, done)`, `convert(ids, "jpeg" \| "png" \| "heic" \| "tiff", done)`, `watermark(ids, { text, position, opacity }, done)`; each asks where to save and calls `done({ saved \| count \| error })`. `status()` → `{ label, progress }` while a job runs (one at a time). |
 
 `windows` and `images.edit` (SDK 3) are described in the next section.
 
@@ -394,6 +408,34 @@ With the `dictionary` capability, a utility reads the **New Oxford American Dict
 If a book isn't on the Mac, a lookup returns `available: false`. People can turn it on in the Dictionary app's Settings, and macOS downloads it.
 
 `clipboard.text` (above) lets a utility read the copied text when it's on screen, for example to look up the word someone just copied. Together with `shortcut`, the utility's `shortcut()` can do that as soon as the shortcut opens it.
+
+## Settings pages (SDK 5)
+
+Options people set once (a shortcut, a folder, a format) belong on the utility's own page in Zephydian's **Settings window**, not on its screen in the panel. Set `"settings": true` in the manifest and give the utility a `settings` object:
+
+```js
+zephydian.utility({
+  view() { /* the tool itself, in the panel */ },
+  storageChanged() { prefs = z.storage.get("prefs") || prefs; },   // the page changed something
+
+  settings: {
+    start() { prefs = z.storage.get("prefs") || prefs; },          // optional: when the page opens
+    view() {
+      return z.ui.section(null, [
+        z.ui.toggle("Play a sound", prefs.sound, on => { prefs.sound = on; z.storage.set("prefs", prefs); }),
+        z.ui.shortcut("Shortcut"),
+        z.ui.text("Shown under the group.", { style: "caption" }),
+      ]);
+    },
+    storageChanged() { prefs = z.storage.get("prefs") || prefs; }, // the panel changed something
+  },
+});
+```
+
+- The page runs the script separately from the panel (like a window does), so the two don't share variables. They share `z.storage`, and each side's `storageChanged()` runs when the other saves, so reload what you keep in memory there.
+- Zephydian draws the page like the rest of Settings, with native controls: each `z.ui.section` becomes a group (its title on top), a `z.ui.divider()` starts a new group, captions at the end of a group become the note under it, a `z.ui.row` that starts with text becomes a "label: control" row, and `toggle`, `picker`, `segmented`, `button` and `shortcut` become their native versions. Other controls are drawn as they are in the panel.
+- In the panel, the utility's header gets a gear button that opens the page, so the utility doesn't need a Settings button of its own.
+- The page has the same capabilities as the utility.
 
 ## A complete example
 

@@ -15,7 +15,7 @@ import CryptoKit
 import Foundation
 import JavaScriptCore
 
-let sdkVersion = 4                       // the newest SDK version the tools (and app) know
+let sdkVersion = 9                       // the newest SDK version the tools (and app) know
 let utilitySDK = 2                       // utilities need SDK 2 or newer
 let maxPackBytes = 5 * 1024 * 1024
 let maxScriptBytes = 512 * 1024
@@ -24,11 +24,11 @@ let assetExtensions: Set<String> = ["png", "json", "txt"]
 /// What packs may declare in "capabilities" (the app shows each one before install).
 let knownCapabilities: Set<String> = [
     "clipboard.write", "clipboard.read", "power.awake", "notifications", "screen.capture",
-    "color.sample", "files.save", "windows", "system.stats", "timers", "shortcut", "images.edit", "dictionary", "clipboard.text",
+    "color.sample", "files.save", "windows", "system.stats", "timers", "shortcut", "images.edit", "dictionary", "clipboard.text", "clipboard.paste", "screen.record", "screen.text", "media.convert", "network.test", "apps.uninstall", "files.clean", "ports", "homebrew", "updates.check",
 ]
 let capabilitySDK = 2                    // capabilities arrived in SDK 2
 /// Capabilities that arrived later, with the SDK version that brought them.
-let laterCapabilities = ["windows": 3, "images.edit": 3, "dictionary": 4, "clipboard.text": 4]
+let laterCapabilities = ["windows": 3, "images.edit": 3, "dictionary": 4, "clipboard.text": 4, "clipboard.paste": 6, "screen.record": 7, "screen.text": 7, "media.convert": 7]
 /// What a pack may offer to open for other utilities ("handles").
 let knownHandles: Set<String> = ["image"]
 
@@ -56,6 +56,8 @@ struct Manifest: Codable {
     var capabilities: [String]?
     /// What the utility opens for others (SDK 3): "image" makes it the screenshot editor.
     var handles: [String]?
+    /// The utility has a page in Zephydian's Settings window (SDK 5): `settings: { view() }` in main.js.
+    var settings: Bool?
 }
 
 /// "1.2.3" → [1, 2, 3]; nil if it isn't three whole numbers.
@@ -142,6 +144,9 @@ func checkPack(_ folder: URL) throws -> Pack {
         if let (cap, needed) = caps.compactMap({ c in laterCapabilities[c].map { (c, $0) } }).first(where: { m.sdkVersion < $0.1 }) {
             throw problem("\"\(cap)\" needs sdkVersion \(needed) or newer")
         }
+    }
+    if m.settings == true, m.kind != "utility" || m.sdkVersion < 5 {
+        throw problem("settings is for utilities with sdkVersion 5 or newer")
     }
     if let handles = m.handles {
         if m.kind != "utility" || m.sdkVersion < 3 { throw problem("handles is for utilities with sdkVersion 3 or newer") }

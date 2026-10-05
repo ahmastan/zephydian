@@ -1,6 +1,18 @@
 # Third-party notices
 
-Zephydian's own code is MIT licensed (see [LICENSE](LICENSE)). It also includes the following third-party material.
+Zephydian is licensed under the GNU General Public License v3.0 or later (see [LICENSE](LICENSE)). It also includes the following third-party material.
+
+## Vorssaint
+
+The app switcher and Finder cut and paste in [`app/SwitcherKit/`](app/SwitcherKit) are copied from
+**Vorssaint** (<https://github.com/vorssaint/vorssaint-utils>, commit `04abae3`), Copyright (C) 2026 Vorssaint,
+licensed under the GNU General Public License v3.0 or later. Every copied file keeps Vorssaint's copyright
+and license notice, and a line at its top says whether Zephydian changed it and how. The files whose names
+start with `Zephydian` were written for Zephydian and contain small marked parts of Vorssaint's code.
+
+The GPL covers Vorssaint's code only. Vorssaint's name, logo, icon and branding are not licensed to
+Zephydian (see Vorssaint's `TRADEMARKS.md`); Zephydian does not use them, and is not affiliated with or
+endorsed by Vorssaint.
 
 ## SCOWL word lists
 

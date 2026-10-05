@@ -44,9 +44,14 @@ final class PackServices {
     @ObservationIgnored lazy var shortcuts = PackShortcuts()
     @ObservationIgnored lazy var system = SystemStats()
     @ObservationIgnored lazy var capture = ScreenCapture(services: self)
+    @ObservationIgnored lazy var media = PackMedia(services: self)
     @ObservationIgnored lazy var images = PackImages(services: self)
     @ObservationIgnored lazy var windows = PackWindows(services: self)
     @ObservationIgnored lazy var dictionary = PackDictionary()
+    @ObservationIgnored lazy var awakeRules = AwakeRules(services: self)
+    @ObservationIgnored lazy var files = PackFileTools(services: self)
+    @ObservationIgnored lazy var tools = PackProcessTools(services: self)
+    @ObservationIgnored lazy var cleanReminder = CleanReminder()
 
     /// Set by AppDelegate: hides the panel (before a screenshot), and the app's settings (for the
     /// look of the screenshot preview card).
@@ -108,17 +113,25 @@ final class PackServices {
         clipboard.removeData(packID: packID)
         shortcuts.remove(packID: packID)
         capture.removeData(packID: packID)
+        media.forget(packID: packID)
+        awakeRules.remove(packID: packID)
+        files.forget(packID: packID)
+        tools.forget(packID: packID)
+        cleanReminder.remove(packID: packID)
         changed()
     }
 
     /// At launch: brings back what installed utilities had running (timers, clipboard recording,
-    /// their shortcuts). Keep awake isn't brought back: it ends when Zephydian quits.
+    /// their shortcuts, keep-awake rules). A manual keep awake isn't brought back: it ends when
+    /// Zephydian quits.
     func restore(_ bundles: [PackBundle]) {
         timers.restore()
         for bundle in bundles {
             let caps = Set(bundle.manifest.capabilities ?? [])
             if caps.contains("clipboard.read") { clipboard.restore(packID: bundle.id, packName: bundle.manifest.name) }
             if caps.contains("shortcut") { shortcuts.restore(packID: bundle.id) }
+            if caps.contains("power.awake") { awakeRules.restore(packID: bundle.id, packName: bundle.manifest.name) }
+            if caps.contains("files.clean") { cleanReminder.restore(packID: bundle.id) }
         }
     }
 

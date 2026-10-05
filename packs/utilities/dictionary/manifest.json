@@ -2,10 +2,11 @@
   "id": "dictionary",
   "name": "Dictionary",
   "kind": "utility",
-  "version": "1.0.0",
-  "sdkVersion": 4,
+  "version": "1.1.0",
+  "sdkVersion": 5,
   "description": "Definitions, synonyms and opposites from the dictionary built into your Mac.",
   "symbol": "character.book.closed",
   "capabilities": ["dictionary", "clipboard.text", "clipboard.write", "shortcut"],
-  "whatsNew": "First release."
+  "whatsNew": "The shortcut setting moved to Zephydian's Settings window (the gear in Dictionary's header opens it).",
+  "settings": true
 }

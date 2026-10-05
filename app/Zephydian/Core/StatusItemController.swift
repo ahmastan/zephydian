@@ -65,6 +65,21 @@ final class StatusItemController: NSObject {
         let menu = NSMenu()
         menu.addItem(withTitle: "Open Zephydian", action: #selector(openPanel), keyEquivalent: "").target = self
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
+        if Features.shared.isOn("command-bar") {
+            menu.addItem(withTitle: "Command Bar", action: #selector(openCommandBar), keyEquivalent: "").target = self
+        }
+        if Features.shared.isOn("quick-panel") {
+            menu.addItem(withTitle: "Quick Panel", action: #selector(openQuickPanel), keyEquivalent: "").target = self
+        }
+        if Features.shared.isOn("cleaning-mode") {
+            menu.addItem(withTitle: "Cleaning Mode", action: #selector(startCleaning), keyEquivalent: "").target = self
+        }
+        if Features.shared.isOn("camera-mirror") {
+            menu.addItem(withTitle: "Camera Mirror", action: #selector(toggleMirror), keyEquivalent: "").target = self
+        }
+        if Features.shared.isOn("shelf") {
+            menu.addItem(withTitle: "Shelf", action: #selector(toggleShelf), keyEquivalent: "").target = self
+        }
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Zephydian", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         statusItem.menu = menu
@@ -74,4 +89,9 @@ final class StatusItemController: NSObject {
 
     @objc private func openPanel() { onToggle() }
     @objc private func openSettings() { onOpenSettings() }
+    @objc private func toggleShelf() { ShelfEngine.current?.toggle() }
+    @objc private func toggleMirror() { CameraMirrorEngine.current?.toggle() }
+    @objc private func openCommandBar() { CommandBarEngine.current?.open() }
+    @objc private func openQuickPanel() { QuickPanelEngine.current?.open() }
+    @objc private func startCleaning() { CleaningMode.shared.start() }
 }

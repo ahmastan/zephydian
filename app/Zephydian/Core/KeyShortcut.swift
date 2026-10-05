@@ -111,7 +111,6 @@ enum ShortcutConflicts {
     ]
 
     /// The shortcuts in the person's macOS keyboard settings: id → (shortcut, enabled).
-    /// (Needs the read-only `com.apple.symbolichotkeys` exception in project.yml.)
     static func userSystemShortcuts() -> [Int: (KeyShortcut, Bool)] {
         guard let all = CFPreferencesCopyAppValue("AppleSymbolicHotKeys" as CFString, "com.apple.symbolichotkeys" as CFString) as? [String: Any] else { return [:] }
         var out: [Int: (KeyShortcut, Bool)] = [:]

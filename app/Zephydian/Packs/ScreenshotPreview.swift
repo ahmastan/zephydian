@@ -7,7 +7,7 @@ import SwiftUI
 /// seconds (and not hovered), it copies the shot and goes away. It's a floating control, so it's
 /// glass (the shared helpers; Frosted on older macOS).
 final class ScreenshotPreview {
-    enum Action { case copy, save, edit, delete, close, timeout }
+    enum Action { case copy, save, edit, pin, delete, close, timeout }
 
     let shotID: String
     private let panel: NSPanel
@@ -93,6 +93,10 @@ private struct PreviewCard: View {
                 HStack(spacing: 6) {
                     Button("Copy") { act(.copy) }
                     Button("Save") { act(.save) }
+                    Button { act(.pin) } label: { Image(systemName: "pin") }
+                        .glassIconButtonStyle()
+                        .help("Pin it on top of everything")
+                        .accessibilityLabel("Pin")
                     Button { act(.delete) } label: { Image(systemName: "trash") }
                         .glassIconButtonStyle()
                         .help("Delete the screenshot")

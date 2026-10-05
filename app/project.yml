@@ -24,8 +24,14 @@ settings:
     SWIFT_VERSION: "6.0"
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor   # UI code runs on the main thread by default
     SWIFT_APPROACHABLE_CONCURRENCY: YES
-    MARKETING_VERSION: 0.6.0                   # the version users see
-    CURRENT_PROJECT_VERSION: 7                 # build number, bump every release
+    MARKETING_VERSION: 0.7.0                   # the version users see
+    CURRENT_PROJECT_VERSION: 8                 # build number, bump every release
+
+packages:
+  # The app switcher and Finder cut and paste, copied from Vorssaint (GPL-3.0-or-later). A package of
+  # its own because it keeps Vorssaint's Swift settings (Swift 5 mode, no main-actor default).
+  SwitcherKit:
+    path: SwitcherKit
 
 targets:
   Zephydian:
@@ -35,6 +41,8 @@ targets:
     sources:
       - path: Zephydian
         type: syncedFolder
+    dependencies:
+      - package: SwitcherKit
     info:
       path: Config/Info.plist
       properties:
@@ -45,24 +53,23 @@ targets:
         LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
         LSApplicationCategoryType: public.app-category.utilities
         LSUIElement: true                      # menu bar app: no Dock icon
-        NSHumanReadableCopyright: "© 2026 ahmastan. MIT License."
+        NSMicrophoneUsageDescription: "Zephydian records your microphone with a screen recording, only when you switch it on (Capture)."
+        NSCameraUsageDescription: "Zephydian shows your camera in a small floating mirror, only while you have it open (Camera Mirror)."
+        NSAudioCaptureUsageDescription: "Zephydian changes the volume of each app (Sound Mixer) by passing that app's sound through itself. Nothing is recorded or saved."
+        NSAppleEventsUsageDescription: "Zephydian asks Finder to move the files you cut and paste, and which folder is open to save a pasted image there (Finder Shortcuts)."
+        NSHumanReadableCopyright: "© 2026 ahmastan. GPL-3.0-or-later."
     entitlements:
       path: Config/Zephydian.entitlements
+      # Not in the App Sandbox: features like Dock Preview and the app switcher read and arrange other
+      # apps' windows through macOS Accessibility, which the sandbox blocks. Hardened Runtime stays on.
+      # Packs are still limited by PackRuntime itself (no network, no files, only declared capabilities).
+      # Hardened Runtime resource entitlements are added here only when a feature that needs them is built.
       properties:
-        com.apple.security.app-sandbox: true
-        # Outgoing connections only, to download packs from GitHub (never while idle, see PackManager).
-        com.apple.security.network.client: true
-        # Saving a file only where the user picks in a save dialog (packs with "files.save", e.g. QR Code's PNG).
-        com.apple.security.files.user-selected.read-write: true
-        # Screenshots save into Pictures/Screenshots by default (Pictures only), or into a folder the person
-        # picks, remembered with a security-scoped bookmark.
-        com.apple.security.assets.pictures.read-write: true
-        com.apple.security.files.bookmarks.app-scope: true
-        # Read-only access to the Dock's settings (to warn about clashing macOS Hot Corners) and to macOS's
-        # keyboard shortcuts (to warn when a shortcut someone records is already used by macOS).
-        com.apple.security.temporary-exception.shared-preference.read-only:
-          - com.apple.dock
-          - com.apple.symbolichotkeys
+        # Finder Shortcuts asks Finder which folder its window shows (macOS asks the person once).
+        com.apple.security.automation.apple-events: true
+        # Capture's screen recording can include the microphone; Camera Mirror shows the camera.
+        com.apple.security.device.audio-input: true
+        com.apple.security.device.camera: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ahmastan.zephydian

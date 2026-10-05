@@ -18,6 +18,12 @@ final class ScreenCapture {
         var format = "png"         // or "jpeg"
         /// Copy every shot to the clipboard as soon as it's taken.
         var autoCopy = false
+        /// Freeze the screen as a still picture while picking (moving things like videos stop).
+        var freeze = false
+        /// What the capture shortcut does: "bar" shows the capture bar, "instant" takes a shot at once.
+        var shortcutAction = "bar"
+        /// The kind of shot the shortcut takes at once: "area", "window" or "screen".
+        var instantMode = "area"
 
         init(delay: Int = 0, pointer: Bool = false, sound: Bool = true, format: String = "png", autoCopy: Bool = false) {
             self.delay = delay; self.pointer = pointer; self.sound = sound; self.format = format; self.autoCopy = autoCopy
@@ -30,6 +36,9 @@ final class ScreenCapture {
             sound = try c.decodeIfPresent(Bool.self, forKey: .sound) ?? true
             format = try c.decodeIfPresent(String.self, forKey: .format) ?? "png"
             autoCopy = try c.decodeIfPresent(Bool.self, forKey: .autoCopy) ?? false
+            freeze = try c.decodeIfPresent(Bool.self, forKey: .freeze) ?? false
+            shortcutAction = try c.decodeIfPresent(String.self, forKey: .shortcutAction) ?? "bar"
+            instantMode = try c.decodeIfPresent(String.self, forKey: .instantMode) ?? "area"
         }
     }
 
@@ -43,11 +52,17 @@ final class ScreenCapture {
         var packID: String?
     }
 
-    private unowned let services: PackServices
+    unowned let services: PackServices
     private(set) var shots: [Shot] = []
-    private var busy = false
-    private var overlay: SelectionOverlay?
+    var busy = false
+    var overlay: SelectionOverlay?
+    let pins = PinnedShots()
+    /// The capture bar, the scrolling capture and the screen recorder (CaptureModes.swift).
+    var bar: CaptureBar?
+    lazy var recorder = ScreenRecorder(capture: self)
     private var countdown: NSPanel?
+    /// The screen held still while picking (the Freeze option).
+    private(set) var frozen: FrozenScreens?
     private var preview: ScreenshotPreview?
     private var thumbnails: [String: NSImage] = [:]
 
@@ -55,15 +70,13 @@ final class ScreenCapture {
 
     // MARK: Permission
 
-    var hasPermission: Bool { CGPreflightScreenCaptureAccess() }
+    var hasPermission: Bool {
+        Permissions.shared.refresh()
+        return Permissions.shared.isGranted(.screenRecording)
+    }
 
     /// Shows macOS's prompt the first time; after that, opens the Screen Recording settings.
-    func requestPermission() {
-        if !CGRequestScreenCaptureAccess(),
-           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
-            NSWorkspace.shared.open(url)
-        }
-    }
+    func requestPermission() { Permissions.shared.request(.screenRecording) }
 
     // MARK: Settings (kept here so the shortcut works without opening the utility)
 
@@ -77,7 +90,7 @@ final class ScreenCapture {
 
     // MARK: Folder
 
-    /// Pictures/Screenshots in the person's home (the Pictures entitlement makes it reachable).
+    /// Pictures/Screenshots in the person's home.
     static var defaultFolder: URL {
         let home = getpwuid(getuid()).flatMap { String(validatingCString: $0.pointee.pw_dir) } ?? NSHomeDirectory()
         return URL(filePath: home, directoryHint: .isDirectory).appending(path: "Pictures/Screenshots", directoryHint: .isDirectory)
@@ -141,20 +154,35 @@ final class ScreenCapture {
     // MARK: Capturing
 
     /// Hides the panel, lets the person pick (area or window), waits the delay, then captures.
+    /// `freeze` overrides the Freeze setting for this shot (the capture bar's toggle).
     /// `done` gets the new shot's id, or nil if it was cancelled or failed (with a reason).
-    func capture(packID: String, mode: Mode, done: @escaping (String?, String?) -> Void) {
+    func capture(packID: String, mode: Mode, freeze: Bool? = nil, done: @escaping (String?, String?) -> Void) {
         guard !busy else { return done(nil, "A screenshot is already in progress") }
         guard hasPermission else {
+            unfreeze()
             requestPermission()
             return done(nil, "Allow Zephydian under Screen Recording in System Settings, then try again")
         }
         busy = true
         let prefs = prefs(packID)
+        let freezing = freeze ?? prefs.freeze
         services.hidePanel()
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(300))           // the panel's closing animation
+            if self?.frozen == nil { try? await Task.sleep(for: .milliseconds(300)) }   // the panel's closing animation
             guard let self else { return }
-            let result = await self.run(mode: mode, prefs: prefs)
+            let result: Result<CGImage, Failure>
+            if freezing {
+                if self.frozen == nil {
+                    // The delay counts down first, then the screen freezes.
+                    if let screen = NSScreen.screens.first(where: { $0.frame.contains(NSEvent.mouseLocation) }) { await self.wait(prefs.delay, on: screen) }
+                    await self.freeze(showsCursor: prefs.pointer)
+                }
+                result = await self.runFrozen(mode: mode)
+                self.unfreeze()
+            } else {
+                self.unfreeze()
+                result = await self.run(mode: mode, prefs: prefs)
+            }
             self.busy = false
             switch result {
             case .success(let image):
@@ -195,13 +223,8 @@ final class ScreenCapture {
             return await shoot(SCContentFilter(display: display, excludingApplications: own, exceptingWindows: []),
                                rect: local, size: rect.size, scale: screen.backingScaleFactor, prefs: prefs)
         case .window:
-            // Front-most first, in the order macOS stacks them, so the highlighted window is the one you see.
-            let order = ((CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]) ?? [])
-                .compactMap { $0[kCGWindowNumber as String] as? CGWindowID }
-            let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
-            let windows = content.windows.filter { $0.windowLayer == 0 && $0.isOnScreen && $0.frame.width > 40 && $0.frame.height > 30
-                && $0.owningApplication?.processID != ProcessInfo.processInfo.processIdentifier }
-                .sorted { (rank[$0.windowID] ?? .max) < (rank[$1.windowID] ?? .max) }
+            // Front-most first, so the highlighted window is the one you see.
+            let windows = Self.pickableWindows(content)
             guard let window = await pickWindow(windows) else { return .failure(Failure(description: "")) }
             let screen = NSScreen.screens.first { $0.frame.contains(Self.cocoaPoint(CGPoint(x: window.frame.midX, y: window.frame.midY))) } ?? NSScreen.main!
             await wait(prefs.delay, on: screen)
@@ -210,7 +233,58 @@ final class ScreenCapture {
         }
     }
 
-    private func shoot(_ filter: SCContentFilter, rect: CGRect?, size: CGSize, scale: CGFloat, prefs: Prefs) async -> Result<CGImage, Failure> {
+    // MARK: Freeze
+
+    /// Covers every screen with a still picture of itself, so nothing moves while picking.
+    /// Zephydian's own windows aren't in the picture. Does nothing if already frozen.
+    func freeze(showsCursor: Bool = false) async {
+        guard frozen == nil, hasPermission else { return }
+        let stills = await stills(showsCursor: showsCursor)
+        guard frozen == nil, !stills.isEmpty else { return }
+        frozen = FrozenScreens(stills)
+    }
+
+    func unfreeze() {
+        frozen?.close()
+        frozen = nil
+    }
+
+    /// Picks on the frozen screen and cuts the shot out of its picture.
+    private func runFrozen(mode: Mode) async -> Result<CGImage, Failure> {
+        guard let frozen else { return .failure(Failure(description: "The screen couldn't be frozen")) }
+        let rect: NSRect
+        switch mode {
+        case .screen:
+            guard let still = frozen.stills.first(where: { $0.0.contains(NSEvent.mouseLocation) }) ?? frozen.stills.first else {
+                return .failure(Failure(description: "No display found"))
+            }
+            return .success(still.1)
+        case .area:
+            guard let area = await pickArea() else { return .failure(Failure(description: "")) }
+            rect = area
+        case .window:
+            guard let content = try? await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true) else {
+                return .failure(Failure(description: "Screen Recording isn't allowed for Zephydian"))
+            }
+            let windows = Self.pickableWindows(content)
+            guard let window = await pickWindow(windows) else { return .failure(Failure(description: "")) }
+            rect = Self.cocoaRect(window.frame)
+        }
+        guard let image = frozen.crop(rect) else { return .failure(Failure(description: "The screenshot failed")) }
+        return .success(image)
+    }
+
+    /// Windows that can be picked, front-most first in the order macOS stacks them.
+    static func pickableWindows(_ content: SCShareableContent) -> [SCWindow] {
+        let order = ((CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]) ?? [])
+            .compactMap { $0[kCGWindowNumber as String] as? CGWindowID }
+        let rank = Dictionary(order.enumerated().map { ($1, $0) }, uniquingKeysWith: { a, _ in a })
+        return content.windows.filter { $0.windowLayer == 0 && $0.isOnScreen && $0.frame.width > 40 && $0.frame.height > 30
+            && $0.owningApplication?.processID != ProcessInfo.processInfo.processIdentifier }
+            .sorted { (rank[$0.windowID] ?? .max) < (rank[$1.windowID] ?? .max) }
+    }
+
+    func shoot(_ filter: SCContentFilter, rect: CGRect?, size: CGSize, scale: CGFloat, prefs: Prefs) async -> Result<CGImage, Failure> {
         let config = SCStreamConfiguration()
         if let rect { config.sourceRect = rect }
         config.width = max(1, Int(size.width * scale))
@@ -228,10 +302,11 @@ final class ScreenCapture {
     // MARK: Picking
 
     /// The person's accent color (the crosshair, the selection and window highlight use it).
-    private var accent: NSColor { services.settings?.accentNSColor ?? .controlAccentColor }
+    var accent: NSColor { services.settings?.accentNSColor ?? .controlAccentColor }
 
-    private func pickArea() async -> CGRect? {
-        await withCheckedContinuation { continuation in
+    func pickArea() async -> CGRect? {
+        // No pixel magnifier when selecting an area (the owner's call, B-21): only the color picker has one.
+        return await withCheckedContinuation { continuation in
             overlay = SelectionOverlay(mode: .area, windows: [], accent: accent) { [weak self] result in
                 self?.overlay = nil
                 continuation.resume(returning: result.area)
@@ -239,7 +314,7 @@ final class ScreenCapture {
         }
     }
 
-    private func pickWindow(_ windows: [SCWindow]) async -> SCWindow? {
+    func pickWindow(_ windows: [SCWindow]) async -> SCWindow? {
         let targets = windows.map { ($0.windowID, Self.cocoaRect($0.frame)) }
         let picked: CGWindowID? = await withCheckedContinuation { continuation in
             overlay = SelectionOverlay(mode: .window, windows: targets, accent: accent) { [weak self] result in
@@ -251,7 +326,7 @@ final class ScreenCapture {
     }
 
     /// A small countdown in the middle of the screen (left out of the picture like every Zephydian window).
-    private func wait(_ seconds: Int, on screen: NSScreen) async {
+    func wait(_ seconds: Int, on screen: NSScreen) async {
         guard seconds > 0 else { return }
         let size = NSSize(width: 96, height: 96)
         let panel = NSPanel(contentRect: NSRect(origin: NSPoint(x: screen.frame.midX - 48, y: screen.frame.midY - 48), size: size),
@@ -383,7 +458,7 @@ final class ScreenCapture {
 
     // MARK: Preview card
 
-    private func showPreview(_ id: String, packID: String) {
+    func showPreview(_ id: String, packID: String) {
         preview?.close()
         guard let image = thumbnail(id) else { return }
         let editor = services.imageEditor()
@@ -393,6 +468,7 @@ final class ScreenCapture {
             case .copy, .timeout: _ = self.copy(id)
             case .save: _ = self.save(id, packID: packID)
             case .edit: if let editor { self.services.openInEditor(editor, id) }
+            case .pin: if let shot = self.shot(id) { self.pins.pin(shot.image, near: NSEvent.mouseLocation) }
             case .delete:
                 self.preview = nil                              // already closing; don't close it twice
                 self.delete(id)
@@ -412,13 +488,13 @@ final class ScreenCapture {
 
     // MARK: Helpers
 
-    private static func shutter() {
+    static func shutter() {
         let path = "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Screen Capture.aif"
         (NSSound(contentsOfFile: path, byReference: true) ?? NSSound(named: "Tink"))?.play()
     }
 
     /// The display under a point (Cocoa coordinates), with its NSScreen.
-    private static func display(at point: NSPoint, in content: SCShareableContent) -> (SCDisplay, NSScreen)? {
+    static func display(at point: NSPoint, in content: SCShareableContent) -> (SCDisplay, NSScreen)? {
         guard let screen = NSScreen.screens.first(where: { $0.frame.contains(point) }) ?? NSScreen.main,
               let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber,
               let display = content.displays.first(where: { $0.displayID == number.uint32Value }) else { return nil }
@@ -440,8 +516,8 @@ final class ScreenCapture {
 
 /// A dimmed layer over every screen: drag out an area, or click a highlighted window. Esc cancels.
 final class SelectionOverlay {
-    enum Mode { case area, window }
-    struct Result { var area: CGRect?; var windowID: CGWindowID? }
+    enum Mode { case area, window, point }
+    struct Result { var area: CGRect?; var windowID: CGWindowID?; var point: CGPoint?; var color: NSColor? }
 
     private var windows: [NSWindow] = []
     private let finish: (Result) -> Void
@@ -450,9 +526,12 @@ final class SelectionOverlay {
     /// Selecting an area shows a crosshair in the accent color; picking a window keeps the arrow.
     private let cursor: NSCursor
 
-    init(mode: Mode, windows targets: [(CGWindowID, NSRect)], accent: NSColor, finish: @escaping (Result) -> Void) {
+    /// `stills`: a picture of each screen (by its frame) taken just before, for the pixel magnifier
+    /// (only the color picker passes them).
+    init(mode: Mode, windows targets: [(CGWindowID, NSRect)], accent: NSColor, stills: [(NSRect, CGImage)] = [],
+         finish: @escaping (Result) -> Void) {
         self.finish = finish
-        cursor = mode == .area ? Self.crosshair(accent) : .arrow
+        cursor = mode == .window ? .arrow : Self.crosshair(accent)
         for screen in NSScreen.screens {
             let window = OverlayWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
             window.level = .screenSaver
@@ -462,7 +541,8 @@ final class SelectionOverlay {
             window.acceptsMouseMovedEvents = true
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             let view = SelectionView(frame: NSRect(origin: .zero, size: screen.frame.size), mode: mode, screenOrigin: screen.frame.origin,
-                                     targets: targets, accent: accent, cursor: cursor)
+                                     targets: targets, accent: accent, cursor: cursor,
+                                     still: stills.first { $0.0 == screen.frame }?.1, scale: screen.backingScaleFactor)
             view.onDone = { [weak self] result in self?.end(result) }
             window.contentView = view
             window.makeKeyAndOrderFront(nil)
@@ -532,13 +612,21 @@ private final class SelectionView: NSView {
     private var hovered: (CGWindowID, NSRect)?
     private let accent: NSColor
     private let cursor: NSCursor
+    /// This screen as it looked when the overlay opened, for the magnifier (nil: no magnifier).
+    private let still: CGImage?
+    private let scale: CGFloat
+    /// Where the pointer is, in this view.
+    private var pointer: NSPoint?
 
-    init(frame: NSRect, mode: SelectionOverlay.Mode, screenOrigin: NSPoint, targets: [(CGWindowID, NSRect)], accent: NSColor, cursor: NSCursor) {
+    init(frame: NSRect, mode: SelectionOverlay.Mode, screenOrigin: NSPoint, targets: [(CGWindowID, NSRect)], accent: NSColor, cursor: NSCursor,
+         still: CGImage?, scale: CGFloat) {
         self.mode = mode
         self.screenOrigin = screenOrigin
         self.targets = targets
         self.accent = accent
         self.cursor = cursor
+        self.still = still
+        self.scale = scale
         super.init(frame: frame)
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect, .cursorUpdate], owner: self))
     }
@@ -558,6 +646,8 @@ private final class SelectionView: NSView {
         // Set on every move: until Zephydian is the active app, macOS doesn't apply cursor rects,
         // so the plus sign would otherwise only show once the button is pressed.
         cursor.set()
+        pointer = convert(event.locationInWindow, from: nil)
+        if still != nil { needsDisplay = true }
         guard mode == .window else { return }
         let global = NSEvent.mouseLocation
         let hit = targets.first { $0.1.contains(global) }       // front-most first (ScreenCaptureKit's order)
@@ -566,9 +656,15 @@ private final class SelectionView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) { cursor.set() }
+    override func mouseExited(with event: NSEvent) { pointer = nil; needsDisplay = true }
 
     override func mouseDown(with event: NSEvent) {
         cursor.set()
+        if mode == .point {
+            let local = convert(event.locationInWindow, from: nil)
+            onDone(.init(point: NSPoint(x: local.x + screenOrigin.x, y: local.y + screenOrigin.y), color: color(at: local)))
+            return
+        }
         if mode == .window {
             let global = NSEvent.mouseLocation
             onDone(.init(windowID: targets.first { $0.1.contains(global) }?.0))
@@ -581,6 +677,7 @@ private final class SelectionView: NSView {
     override func mouseDragged(with event: NSEvent) {
         guard mode == .area else { return }
         current = convert(event.locationInWindow, from: nil)
+        pointer = current
         needsDisplay = true
         cursor.set()
     }
@@ -617,6 +714,74 @@ private final class SelectionView: NSView {
         } else {
             context.fill(bounds)
         }
+        if let pointer, still != nil { drawMagnifier(context, at: pointer) }
+    }
+
+    // MARK: The magnifier
+
+    /// The pixels around the pointer, as they were when the overlay opened.
+    private func pixels(around point: NSPoint, radius: Int) -> CGImage? {
+        guard let still else { return nil }
+        let x = Int((point.x * scale).rounded(.down)), y = Int(((bounds.height - point.y) * scale).rounded(.down))
+        return still.cropping(to: CGRect(x: x - radius, y: y - radius, width: radius * 2 + 1, height: radius * 2 + 1))
+    }
+
+    /// The color of the pixel under a point.
+    private func color(at point: NSPoint) -> NSColor? {
+        guard let pixel = pixels(around: point, radius: 0) else { return nil }
+        return NSBitmapImageRep(cgImage: pixel).colorAt(x: 0, y: 0)?.usingColorSpace(.sRGB)
+    }
+
+    /// A round loupe beside the pointer: the pixels under it, enlarged, the middle one outlined, and its
+    /// color as hex (and the position, while selecting an area).
+    private func drawMagnifier(_ context: CGContext, at point: NSPoint) {
+        let radius = 7, size: CGFloat = 120
+        guard let crop = pixels(around: point, radius: radius) else { return }
+        var origin = NSPoint(x: point.x + 24, y: point.y - size - 24)
+        if origin.x + size > bounds.maxX - 6 { origin.x = point.x - size - 24 }
+        if origin.y < 34 { origin.y = point.y + 24 }
+        let rect = NSRect(origin: origin, size: NSSize(width: size, height: size))
+        context.saveGState()
+        context.setShadow(offset: CGSize(width: 0, height: -2), blur: 8, color: NSColor.black.withAlphaComponent(0.4).cgColor)
+        context.addEllipse(in: rect)
+        context.setFillColor(NSColor.black.cgColor)
+        context.fillPath()
+        context.restoreGState()
+        context.saveGState()
+        context.addEllipse(in: rect)
+        context.clip()
+        context.interpolationQuality = .none
+        context.draw(crop, in: rect)
+        let cell = size / CGFloat(radius * 2 + 1)
+        let middle = NSRect(x: rect.minX + CGFloat(radius) * cell, y: rect.minY + CGFloat(radius) * cell, width: cell, height: cell)
+        context.setStrokeColor(NSColor.white.cgColor)
+        context.setLineWidth(1.5)
+        context.stroke(middle)
+        context.restoreGState()
+        context.addEllipse(in: rect.insetBy(dx: 0.75, dy: 0.75))
+        context.setStrokeColor(accent.cgColor)
+        context.setLineWidth(1.5)
+        context.strokePath()
+
+        var label = color(at: point).map(Self.hex) ?? ""
+        if mode == .area {
+            label = "\(Int((point.x * scale).rounded())), \(Int(((bounds.height - point.y) * scale).rounded()))" + (label.isEmpty ? "" : "  " + label)
+        }
+        guard !label.isEmpty else { return }
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold),
+                                                          .foregroundColor: NSColor.white]
+        let text = label as NSString
+        let textSize = text.size(withAttributes: attributes)
+        let badge = NSRect(x: rect.midX - textSize.width / 2 - 7, y: rect.minY - textSize.height - 10, width: textSize.width + 14, height: textSize.height + 6)
+        NSColor(white: 0, alpha: 0.72).setFill()
+        NSBezierPath(roundedRect: badge, xRadius: 5, yRadius: 5).fill()
+        text.draw(at: NSPoint(x: badge.minX + 7, y: badge.minY + 3), withAttributes: attributes)
+    }
+
+    static func hex(_ color: NSColor) -> String {
+        guard let c = color.usingColorSpace(.sRGB) else { return "" }
+        return String(format: "#%02X%02X%02X", Int((c.redComponent * 255).rounded()), Int((c.greenComponent * 255).rounded()),
+                      Int((c.blueComponent * 255).rounded()))
     }
 
     /// A glowing border in the accent color with a thin white line inside it, and the size in

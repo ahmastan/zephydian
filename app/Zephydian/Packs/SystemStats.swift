@@ -2,21 +2,36 @@ import Darwin
 import Foundation
 import IOKit.ps
 
-/// Readings for the `system.stats` capability: CPU, memory, disk, battery, network and uptime.
-/// Nothing runs in the background: each reading happens when a utility asks (the System utility
-/// asks once a second while it's on screen). CPU and network are the change since the previous
-/// reading. There are no per-app figures: inside the sandbox they can't match Activity Monitor.
+/// Readings for the `system.stats` capability: CPU, memory, disk, battery, network, uptime and,
+/// since SDK 8, GPU, temperatures, fans, power, the busiest apps and the Mac's addresses.
+/// Nothing runs in the background: each reading happens when something asks (the System utility
+/// once a second while it's on screen, the menu bar readouts and alerts while they're on). CPU,
+/// network and the busy apps are the change since the previous reading, so each reader keeps its
+/// own `SystemStats`. Every reading also goes into `SystemHistory` for the graphs.
 final class SystemStats {
     private var lastCPU: (ticks: [UInt32], at: Date)?
     private var lastNet: (inBytes: UInt64, outBytes: UInt64, at: Date)?
+    private let busy = BusyApps()
 
-    func read() -> [String: Any] {
+    /// `apps`: also work out the busiest apps (scans every process, so only when shown).
+    func read(apps: Bool = true) -> [String: Any] {
         var out: [String: Any] = ["uptime": ProcessInfo.processInfo.systemUptime]
         out["cpu"] = cpu()
         out["memory"] = memory()
         out["disk"] = disk()
-        out["battery"] = battery()
+        var battery = battery()
+        let details = SystemSensors.battery()
+        if battery["present"] as? Bool == true { battery.merge(details) { a, _ in a } }
+        out["battery"] = battery
         out["network"] = network()
+        if let gpu = SystemSensors.gpu() { out["gpu"] = gpu }
+        out["temperatures"] = SystemSensors.temperatures()
+        let fans = SystemSensors.fans()
+        if !fans.isEmpty { out["fans"] = fans }
+        if let watts = details["systemWatts"] { out["watts"] = watts }
+        out["addresses"] = SystemSensors.localAddresses()
+        if apps { out["apps"] = busy.read() }
+        SystemHistory.shared.add(out)
         return out
     }
 
@@ -118,5 +133,49 @@ final class SystemStats {
         let dIn = inBytes >= last.inBytes ? Double(inBytes - last.inBytes) : 0
         let dOut = outBytes >= last.outBytes ? Double(outBytes - last.outBytes) : 0
         return ["in": dIn / seconds, "out": dOut / seconds]
+    }
+}
+
+/// The last ten minutes of readings, for the graphs. Filled by whoever reads (the System utility
+/// while it's open, the menu bar readouts while they're on); nothing reads just for it.
+final class SystemHistory {
+    static let shared = SystemHistory()
+    static let span: TimeInterval = 600
+
+    struct Sample {
+        let at: Date
+        let cpu: Double
+        let memory: Double
+        let gpu: Double?
+        let netIn: Double
+        let netOut: Double
+        let temperature: Double?
+    }
+
+    private(set) var samples: [Sample] = []
+
+    func add(_ reading: [String: Any]) {
+        let now = Date()
+        if let last = samples.last, now.timeIntervalSince(last.at) < 0.9 { return }   // two readers at once
+        let cpu = reading["cpu"] as? [String: Any] ?? [:]
+        let memory = reading["memory"] as? [String: Any] ?? [:]
+        let net = reading["network"] as? [String: Any] ?? [:]
+        let used = memory["used"] as? Double ?? 0, total = max(memory["total"] as? Double ?? 1, 1)
+        samples.append(Sample(at: now, cpu: (cpu["user"] as? Double ?? 0) + (cpu["system"] as? Double ?? 0),
+                              memory: used / total * 100, gpu: reading["gpu"] as? Double,
+                              netIn: net["in"] as? Double ?? 0, netOut: net["out"] as? Double ?? 0,
+                              temperature: (reading["temperatures"] as? [String: Double])?["cpu"]))
+        samples.removeAll { now.timeIntervalSince($0.at) > Self.span }
+    }
+
+    /// For the pack: [{ t (seconds ago), cpu, memory, gpu, in, out, temp }].
+    func json() -> [[String: Any]] {
+        let now = Date()
+        return samples.map { s in
+            var o: [String: Any] = ["t": now.timeIntervalSince(s.at), "cpu": s.cpu, "memory": s.memory, "in": s.netIn, "out": s.netOut]
+            if let gpu = s.gpu { o["gpu"] = gpu }
+            if let t = s.temperature { o["temp"] = t }
+            return o
+        }
     }
 }

@@ -53,7 +53,9 @@ struct NoteEditor: NSViewRepresentable {
         scroll.drawsBackground = false
         scroll.borderType = .noBorder
 
-        let textView = NoteTextView(frame: .zero)
+        // TextKit 1: restyling the whole note on every edit made TextKit 2 re-estimate the
+        // note's height, so a long note jumped to the top and back when Space was typed.
+        let textView = NoteTextView(usingTextLayoutManager: false)
         textView.isRichText = false
         textView.allowsUndo = true
         textView.drawsBackground = false

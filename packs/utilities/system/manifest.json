@@ -2,10 +2,10 @@
   "id": "system",
   "name": "System",
   "kind": "utility",
-  "version": "1.0.0",
-  "sdkVersion": 2,
-  "description": "CPU, memory, disk, battery and network at a glance, measured only while you look.",
+  "version": "1.1.0",
+  "sdkVersion": 8,
+  "description": "CPU, GPU, memory, temperatures, battery, busy apps and network, measured while you look.",
   "symbol": "gauge.with.dots.needle.50percent",
-  "capabilities": ["system.stats"],
-  "whatsNew": "First release."
+  "capabilities": ["system.stats", "network.test"],
+  "whatsNew": "GPU, temperatures and fans, battery health and power draw, the busiest apps, graphs up to ten minutes, your IP addresses and a speed test."
 }

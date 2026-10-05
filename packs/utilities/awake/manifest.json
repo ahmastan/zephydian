@@ -2,10 +2,13 @@
   "id": "awake",
   "name": "Awake",
   "kind": "utility",
-  "version": "1.0.0",
-  "sdkVersion": 2,
-  "description": "Keep your Mac from sleeping, for a while or until you turn it off.",
+  "version": "1.2.0",
+  "sdkVersion": 8,
+  "description": "Keep your Mac awake for a while, until you turn it off, or by itself when you choose.",
   "symbol": "cup.and.saucer",
-  "capabilities": ["power.awake"],
-  "whatsNew": "First release."
+  "capabilities": [
+    "power.awake"
+  ],
+  "whatsNew": "Keep the Mac awake by itself while chosen apps are open, while it's on power, or while an external display is connected (on Awake's settings page).",
+  "settings": true
 }

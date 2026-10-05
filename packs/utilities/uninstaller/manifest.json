@@ -1,0 +1,11 @@
+{
+  "id": "uninstaller",
+  "name": "Uninstaller",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 9,
+  "description": "Remove an app and the files it leaves behind, after you review them. Goes to the Trash.",
+  "symbol": "xmark.bin",
+  "capabilities": ["apps.uninstall"],
+  "whatsNew": "First release."
+}

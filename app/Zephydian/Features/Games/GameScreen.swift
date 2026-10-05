@@ -29,6 +29,16 @@ struct GameScreen: View {
                                     .accessibilityLabel("Score: \(session.scoreText)")
                             }
 
+                            // A utility with a settings page (SDK 5): the gear opens it in the Settings window.
+                            if let pack = (session as? PackSession)?.bundle, pack.hasSettings {
+                                Button { model.openSettingsWindow(SettingsSelection.utility(pack.id).rawValue) } label: {
+                                    Image(systemName: "gearshape")
+                                }
+                                .glassIconButtonStyle()
+                                .help("\(pack.manifest.name) settings")
+                                .accessibilityLabel("\(pack.manifest.name) settings")
+                            }
+
                             if session.showsPauseButton {
                                 Button { session.togglePause() } label: {
                                     Image(systemName: session.isRunning ? "pause.fill" : "play.fill")

@@ -1,9 +1,12 @@
 import AppKit
 import SwiftUI
+import SwitcherKit
 
 /// While a shortcut field is recording, the panel's own key handling stands aside.
 enum ShortcutRecording {
-    static var isActive = false
+    static var isActive = false {
+        didSet { SwitcherKit.setRecordingShortcut(isActive) }   // the switcher lets every key through meanwhile
+    }
 }
 
 /// A field for recording a keyboard shortcut: click it, press the keys (at least ⌘, ⌥ or ⌃, or a
@@ -93,6 +96,32 @@ extension ShortcutConflicts {
     @MainActor static func zephydianShortcuts(panel: KeyShortcut?, excluding: String) -> [String: KeyShortcut] {
         var out: [String: KeyShortcut] = [:]
         if excluding != "panel", let panel { out["The panel shortcut"] = panel }
+        if Features.shared.isOn("switcher") {
+            if excluding != "switcher-apps", let s = SwitcherShortcutStore.apps { out["The app switcher"] = s }
+            if excluding != "switcher-windows", let s = SwitcherShortcutStore.windows { out["The app switcher (windows)"] = s }
+        }
+        if Features.shared.isOn("finder-shortcuts"), excluding != "finder-rename",
+           UserDefaults.standard.object(forKey: SwitcherKit.Keys.finderRenameEnabled) as? Bool ?? true,
+           let s = SwitcherShortcutStore.read(SwitcherKit.Keys.finderRenameShortcut, fallback: FinderShortcutsSettingsView.renameDefault) {
+            out["Finder's rename shortcut"] = s
+        }
+        if Features.shared.isOn("snippets"), excluding != "snippet-menu", let s = InputSettings.shared.snippetMenuShortcut {
+            out["The snippet menu"] = s
+        }
+        let clip = ClipboardToolsSettings.shared
+        if Features.shared.isOn("paste-plain"), excluding != "plain-paste", let s = clip.plainPasteShortcut { out["Paste as plain text"] = s }
+        if Features.shared.isOn("shelf"), excluding != "shelf", let s = clip.shelfShortcut { out["The Shelf"] = s }
+        if Features.shared.isOn("camera-mirror"), excluding != "camera-mirror", let s = CameraMirrorSettings.shared.shortcut { out["Camera Mirror"] = s }
+        if Features.shared.isOn("quick-toggles"), excluding != "mic-mute", let s = QuickTogglesSettings.shared.micShortcut { out["Mute the microphone"] = s }
+        if Features.shared.isOn("cleaning-mode"), excluding != "cleaning", let s = CleaningModeSettings.shared.shortcut { out["Cleaning mode"] = s }
+        if Features.shared.isOn("command-bar"), excluding != "command-bar", let s = CommandBarSettings.shared.shortcut { out["The Command Bar"] = s }
+        if Features.shared.isOn("quick-panel"), excluding != "quick-panel", let s = QuickPanelSettings.shared.shortcut { out["The Quick Panel"] = s }
+        if Features.shared.isOn("sound-mixer"), excluding != "sound-cycle", let s = SoundSettings.shared.cycleShortcut { out["Switch the sound output"] = s }
+        if Features.shared.isOn("window-layout") {
+            for (layout, shortcut) in WindowToolsSettings.shared.shortcuts where excluding != "layout-\(layout.rawValue)" {
+                out["Window Layout (\(layout.title.lowercased()))"] = shortcut
+            }
+        }
         let shortcuts = PackServices.shared.shortcuts
         for bundle in PackLibrary.shared.packs where bundle.id != excluding {
             if let s = shortcuts.current(packID: bundle.id) { out[bundle.manifest.name] = s }

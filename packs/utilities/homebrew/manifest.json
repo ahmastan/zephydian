@@ -1,0 +1,11 @@
+{
+  "id": "homebrew",
+  "name": "Homebrew",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 9,
+  "description": "Search, install, upgrade and remove Homebrew packages without the Terminal.",
+  "symbol": "mug",
+  "capabilities": ["homebrew"],
+  "whatsNew": "First release."
+}

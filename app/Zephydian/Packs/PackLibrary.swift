@@ -12,7 +12,7 @@ final class PackLibrary {
     @ObservationIgnored private var icons: [String: NSImage] = [:]
     @ObservationIgnored private var fingerprint = ""
 
-    /// Application Support/Zephydian/Packs in the app's sandbox.
+    /// ~/Library/Application Support/Zephydian/Packs.
     static var packsDirectory: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appending(path: "Zephydian/Packs", directoryHint: .isDirectory)

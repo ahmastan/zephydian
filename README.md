@@ -7,7 +7,7 @@
 **[zephydian.com](https://zephydian.com)**: try it right in your browser.
 
 ![macOS 14+](https://img.shields.io/badge/macOS-14%2B-blue)
-![License: MIT](https://img.shields.io/badge/license-MIT-green)
+![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-green)
 ![Status: in development](https://img.shields.io/badge/status-in%20development-orange)
 
 [![The Zephydian panel open over a Mac desktop, showing its games](assets/brand/preview.jpg)](https://zephydian.com)
@@ -20,12 +20,35 @@
 
 - **Corner hover to open.** Pick any of the four screen corners. The panel appears when you hover and disappears when you're done.
 - **Quick Notes.** Tabbed notes that autosave as plain Markdown files you can open anywhere. Open them in their own window that stays on top of other apps, drag a single note out of it to pin it anywhere on screen, preview notes formatted (tick checkboxes right in them), search every note, and export them.
-- **Utilities you choose.** Add the ones you want from the **Library**: Clipboard (a private history of what you copy), Screenshot, Markup (crop, annotate and pixelate screenshots or any image), Dictionary (definitions and synonyms from your Mac's own dictionary, offline), Passwords, Colors (pick any color on screen), Timer, Calculator, Text tools, QR Code, Awake (keep your Mac awake) and System (CPU, memory, disk, battery and network). None come preinstalled, and more utilities are coming soon.
+- **Utilities you choose.** Add the ones you want from the **Library**: Clipboard (a private history of what you copy, pasted straight back), Capture (screenshots, screen recordings with an editor, text and colors from your screen), Markup (crop, annotate and pixelate screenshots or any image), Media (shrink videos, convert images, make GIFs), Dictionary (definitions and synonyms from your Mac's own dictionary, offline), Passwords, Colors, Timer, Calculator, Text tools, QR Code, Awake (keep your Mac awake, also by rules), System (CPU, GPU, memory, temperatures, battery and network), and for tidying your Mac: Uninstaller, Cleaner, Chat Files, Ports, App Updates and Homebrew. None come preinstalled, and more utilities are coming soon.
+- **Mac features you switch on.** A **Features** page in Settings turns on only what you want; anything off costs nothing:
+  - **Windows and Dock:** Dock Preview (hover an app in the Dock to see its windows), an App Switcher for ⌘Tab with live previews, Window Layout (snap windows with shortcuts, ⌥-drag to move), Maximize with the Green Button, Quit Protection, Quit on Close and Focus Follows Mouse.
+  - **Keyboard and mouse:** Text Snippets, a Super Key on Caps Lock, smooth Scrolling, Mouse Buttons, Three-Finger Middle Click, No Mouse Acceleration, and filters for a worn mouse or keyboard.
+  - **Clipboard and files:** Clean URLs, Paste as Plain Text, Auto-Clear Clipboard, a Shelf for dragged files, Finder Shortcuts (cut and paste files with ⌘X and ⌘V, rename with F2) and a Disk Image Installer.
+  - **Everyday tools:** a Command Bar (⌥Space), a Quick Panel, Quick Toggles, Cleaning Mode and a Camera Mirror.
+  - **System and sound:** a Sound Mixer with per-app volume, Headphones Safety, Music Blocker, Display Brightness for every display, Bluetooth Off in Sleep, Menu Bar Stats and System Alerts.
 - **Games you choose.** Snake, Stackr (block stacking) and Five (5-letter word guess) come installed. Spokes (letter-wheel crosswords), Fleet (sea battle), Airship (top-down shooter), 2048 (slide and merge numbers), Mines (clear the minefield), Nines (number-placement puzzles) and Switch (turn every light off) are a click away in the **Library**, with more games on the way. Remove any game you don't play. A **Stats** screen shows your games played, wins, best scores and streaks.
 - **Make it yours.** Light, dark, or system appearance, accent color themes (or your Mac's own accent color, followed live), a small, medium or large panel, Liquid Glass or frosted panel (macOS 26+), and a choice of menu bar icon (or none at all).
-- **Keyboard shortcuts you pick.** Record any key combination to open the panel (and for Clipboard, Screenshot and Dictionary). Zephydian tells you if something else on your Mac already uses it.
-- **Featherweight.** Native Swift and SwiftUI. ~9 MB app (a 5 MB download), ~30 MB memory, and ~0.1% CPU when idle. Games pause the moment the panel hides.
-- **Private.** No accounts and no tracking. Zephydian goes online only to download games and utilities you pick from the Library, and about once a day to update them (you can turn that off). Nothing about you is sent. Utilities keep their data on your Mac.
+- **Keyboard shortcuts you pick.** Record any key combination for the panel, the utilities and every feature. Zephydian tells you right under the field if something else on your Mac already uses it.
+- **Featherweight.** Native Swift and SwiftUI. A small app, ~30 MB memory, and ~0.1% CPU when idle with features off. Each feature runs only while it's switched on, and games pause the moment the panel hides.
+- **Private.** No accounts and no tracking. Zephydian goes online only to download games and utilities you pick from the Library and about once a day to update them (you can turn that off), and when you ask a utility to: System's public IP and speed test, App Updates checking versions, and Homebrew. Nothing about you is sent. Everything else stays on your Mac.
+
+## Permissions
+
+Zephydian asks for a macOS permission only when you switch on something that needs it, and **Settings → Permissions** shows what uses each one (with a **Repair** button if macOS loses track of it).
+
+| Permission | Used by |
+| --- | --- |
+| Accessibility | Most Mac features: Dock Preview, the App Switcher, window tools, keyboard and mouse features, Paste as Plain Text, Finder Shortcuts, Cleaning Mode, and the Command Bar's menu search |
+| Screen Recording | Capture, and window previews in Dock Preview and the App Switcher |
+| Microphone | Capture's recordings, when you include the microphone |
+| Camera | Camera Mirror |
+| System Audio Recording | Sound Mixer's per-app volume, and Capture recording your Mac's sound |
+| Automation (Finder) | Finder Shortcuts, and emptying the Trash from Quick Toggles |
+| Notifications | Timer, System Alerts and Cleaner's reminder |
+| Full Disk Access (optional) | Chat Files, to reach some chat apps' downloads |
+
+Since 0.7, Zephydian runs outside the App Sandbox, because these features read and arrange other apps' windows, which the sandbox doesn't allow. Your notes and settings moved to `~/Library/Application Support/Zephydian` (the old copy is kept as a backup). Packs are still locked down by Zephydian itself.
 
 ## Install
 
@@ -65,28 +88,36 @@ Click **Get more** above the Games or Utilities grid to add or remove games and 
 - **Safe by design.** A game can only draw on its game area, react to keys and clicks, and save its own progress. No pack has internet access.
 - **You see what a utility uses.** A utility that needs more (the clipboard, screenshots, notifications, keeping the Mac awake, a keyboard shortcut) lists it under **Uses** in the Library, and Zephydian asks you before installing it. It can't use anything it didn't list. Screenshots also need macOS's own Screen Recording permission, a utility can save a file only where you choose, Markup opens only images you pick, paste or capture, and Dictionary reads what you copied only while it's on screen.
 - **Background work is visible.** When a utility keeps working with the panel closed (Awake, a running timer), the menu bar icon turns your accent color, and **Settings → Packs** lets you stop it.
+- **Settings for each utility.** Utilities with options get their own page under **Utilities** in the Settings window (the gear in a utility's header opens it).
 - **Verified.** The list of packs is signed, and every download must match its SHA-256 fingerprint before it's installed. Anything altered is refused.
 - **Your choice.** Nothing is installed without you. Removing a game keeps its progress in case you come back, unless you choose to delete that too.
 - **Updates** install quietly, never while you're playing. Turn off the daily check in **Settings → Packs**.
 
 ### What each utility can use
 
-Nothing here uses the internet. Copy buttons you click work in every utility and aren't listed.
+Only App Updates, Homebrew and System's network test use the internet, and only when you ask. Copy buttons you click work in every utility and aren't listed. Anything a utility removes goes to the Trash.
 
 | Utility | What it can use |
 | --- | --- |
-| Awake | Keeps your Mac awake while it's switched on (in the background) |
+| App Updates | Checks your apps' versions online (the App Store, Homebrew, apps' own update feeds), updates Homebrew apps, and opens the others |
+| Awake | Keeps your Mac awake while it's switched on (in the background), also by your rules (while chosen apps run, on power, with a display) |
 | Calculator | Nothing extra |
-| Clipboard | Reads what you copy while recording is on (in the background, never what password managers mark private), and its own keyboard shortcut |
+| Capture | Pictures and recordings of your screen (macOS asks for Screen Recording first), your microphone and Mac's sound if you include them, reading text on screen (on your Mac), saving to Pictures/Screenshots or a folder you pick, and its own keyboard shortcut |
+| Chat Files | Lists and moves to the Trash old downloads from chat apps, after you review them |
+| Cleaner | Lists and moves to the Trash caches, logs and leftovers, after you review them, and an optional reminder notification |
+| Clipboard | Reads what you copy while recording is on (in the background, never what password managers mark private), pastes an item back into the app you were in, and its own keyboard shortcut |
 | Colors | The color of a spot on your screen that you pick |
 | Dictionary | The dictionary and thesaurus built into macOS, the text you copied (only while it's on screen), copying, and its own keyboard shortcut |
+| Homebrew | Runs Homebrew (which goes online) to search, install, upgrade and remove packages |
 | Markup | Its own window, the screenshots you took, images you open or paste, copying, and saving where you choose |
+| Media | Converts the videos and images you pick, on your Mac |
 | Passwords | Nothing extra |
+| Ports | Lists programs listening on network ports, and stops the one you choose |
 | QR Code | Copying, and saving where you choose |
-| Screenshot | Pictures of your screen (macOS asks for Screen Recording permission first), saving to Pictures/Screenshots or a folder you pick, and its own keyboard shortcut |
-| System | CPU, memory, disk, battery and network figures for the whole Mac, read only while it's on screen |
+| System | CPU, GPU, memory, temperatures, battery, busy apps and network for the whole Mac, read only while it's on screen; your public IP and a speed test when you ask (online) |
 | Text | Nothing extra |
 | Timer | Running timers in the background, and notifications (macOS asks first) |
+| Uninstaller | Lists your apps and an app's leftover files, and moves the ones you approve to the Trash |
 
 Want to make a game or a utility? See [docs/PACKS.md](docs/PACKS.md).
 
@@ -108,7 +139,9 @@ Bug reports, utility and game ideas, and pull requests are welcome. New games an
 
 ## License
 
-[MIT](LICENSE) © 2026 ahmastan
+Zephydian is free software under the [GNU General Public License v3.0 or later](LICENSE) © 2026 ahmastan. You may use, share and change it; if you share a changed version, it must stay under the same license with its source code available. Versions up to 0.6.0 were released under the MIT License, which still applies to those releases.
+
+The app switcher and Finder cut and paste (`app/SwitcherKit/`) come from [Vorssaint](https://github.com/vorssaint/vorssaint-utils) by Vorssaint, under the GPL-3.0-or-later. Zephydian is not affiliated with or endorsed by Vorssaint.
 
 Word lists are derived from [SCOWL](http://wordlist.aspell.net/) by Kevin Atkinson, and Passwords uses the [EFF Large Wordlist](https://www.eff.org/dice) (CC BY 3.0). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 

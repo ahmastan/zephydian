@@ -1,0 +1,11 @@
+{
+  "id": "chat-files",
+  "name": "Chat Files",
+  "kind": "utility",
+  "version": "1.0.0",
+  "sdkVersion": 9,
+  "description": "Clear old photos, videos and files that chat apps pile up. Goes to the Trash.",
+  "symbol": "bubble.left.and.text.bubble.right",
+  "capabilities": ["files.clean"],
+  "whatsNew": "First release."
+}

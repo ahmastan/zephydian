@@ -1,23 +1,40 @@
 import AppKit
+import Carbon.HIToolbox
 import Observation
 import UserNotifications
+import SwitcherKit
 
 /// Creates and connects the app's pieces: settings, the panel, the menu bar icon and the corner trigger.
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let settings = SettingsStore()
-    private let model = AppModel()
-    private let notes = NotesStore()
+    private let settings: SettingsStore
+    private let model: AppModel
+    private let notes: NotesStore
     private let mouse = MouseMonitor()
     private let hotKey = GlobalHotKey()
     private var registeredShortcut: KeyShortcut??
     private var panel: PanelController!
     private var noteWindows: NoteWindows!
     private var notesWindow: NotesWindowController!
+    private var settingsWindow: SettingsWindowController!
     private var statusItem: StatusItemController!
     private var cornerTrigger: CornerTrigger!
     private let notificationPresenter = NotificationPresenter()
+    /// The result of bringing data over from the old sandbox container (first launch only).
+    private let storageMove: StorageMove.Outcome
+
+    override init() {
+        // Before anything reads settings or files: they may still be in the old sandbox container.
+        storageMove = StorageMove.runIfNeeded()
+        settings = SettingsStore()
+        model = AppModel()
+        notes = NotesStore()
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // The switcher's settings, and any macOS shortcut a crashed run left switched off, before any feature starts.
+        SwitcherKit.launch()
+        if case .failed(let message) = storageMove { StorageMove.reportFailure(message) }
         notes.load()
         panel = PanelController(settings: settings, model: model, notes: notes)
         noteWindows = NoteWindows(notes: notes, settings: settings)
@@ -45,6 +62,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, !self.model.isOnboarding else { return }
             self.panel.toggle()
         }
+        // The Shelf set to open in the corner panel: it appears as soon as a drag starts.
+        ShelfEngine.showInPanel = { [weak self] in
+            guard let self, !self.model.isOnboarding else { return }
+            self.model.openShelf()
+            self.panel.show()
+        }
+        ShelfEngine.closePanel = { [weak self] unlessInside in
+            guard let self, self.model.isShowingShelf else { return }
+            if unlessInside, self.panel.containsPointer { return }
+            self.panel.hide()
+        }
 
         statusItem.onToggle = { [weak self] in
             guard let self, !self.model.isOnboarding else { return }
@@ -58,6 +86,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         model.closePanel = { [weak self] in self?.panel.hide() }
+        model.showPanel = { [weak self] in self?.panel.show() }
+        settingsWindow = SettingsWindowController(settings: settings, model: model, notes: notes)
+        model.openSettingsWindow = { [weak self] raw in self?.settingsWindow.show(raw.flatMap(SettingsSelection.init(rawValue:))) }
         model.startOnboarding = { [weak self] in self?.panel.showOnboarding() }
         model.finishOnboarding = { [weak self] in self?.panel.finishOnboarding() }
 
@@ -67,6 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let packs = PackManager.shared
         packs.isInUse = { [weak self] id in self?.model.isShowingGame == true && self?.model.gameID == id }
         packs.didChange = { [weak self] in
+            self?.offerCaptureShortcut()
             self?.model.discardHiddenPackSession()
             PackLibrary.shared.refresh()
         }
@@ -80,9 +112,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         services.hidePanel = { [weak self] in self?.panel.hide() }
         services.shortcuts.onOpen = { [weak self] id in
             guard let self, !self.model.isOnboarding else { return }
-            // A screenshot utility's shortcut takes an Area screenshot straight away.
+            // A capture utility's shortcut opens the capture bar straight away (or stops a recording).
             if PackLibrary.shared.packs.first(where: { $0.id == id })?.manifest.capabilities?.contains("screen.capture") == true {
-                services.capture.capture(packID: id, mode: .area) { _, _ in }
+                services.capture.openBar(packID: id)   // the capture bar (19.10)
                 return
             }
             // Pressed again while that utility is showing: close the panel, like the main shortcut.
@@ -104,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             services.windows.open(bundle, input: PackRuntime.jsonString(["image": "image:\(image)"]))
         }
         services.restore(PackLibrary.shared.packs.filter { $0.kind == .utility })
+        offerCaptureShortcut()
         if Bundle.main.bundleIdentifier != nil {
             UNUserNotificationCenter.current().delegate = notificationPresenter
         }
@@ -115,6 +148,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         applySettings()
         observeSettings()
+        // Put back what features changed in macOS, if Zephydian stopped without doing it (a feature
+        // that's on sets it again when it starts).
+        SystemShortcuts.restore()   // macOS's ⌘Tab
+        SuperKeyEngine.restore()    // the Caps Lock remapping
+        PointerAccelerationEngine.restore()
+        Features.shared.appSettings = settings
+        CommandBarHooks.openSettings = { [weak self] page in self?.model.openSettingsWindow(page) }
+        CommandBarHooks.openUtility = { [weak self] id in
+            guard let self, !self.model.isOnboarding else { return }
+            self.model.closeLibrary()
+            self.model.tab = .utilities
+            self.model.openGame(id)
+            self.panel.show()
+        }
+        Features.shared.start()     // only the features switched on, once their permissions are there
         // The System accent follows macOS's accent color as soon as it changes.
         NotificationCenter.default.addObserver(forName: NSColor.systemColorsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.settings.systemAccentDidChange() }
@@ -126,10 +174,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        Features.shared.stopAll()   // puts back anything a feature changed (⌘Tab, the Dock…)
+        SwitcherKit.terminate()     // every macOS shortcut the switcher held goes back
         notes.flush()
     }
 
-    /// Launching Zephydian again while it's running (e.g. from Finder or Spotlight) opens Settings.
+    /// Launching Zephydian again while it's running (e.g. from Finder or Spotlight) opens the Settings window.
     /// This is the way back in if the menu bar icon is hidden. While a utility's window is open (and
     /// Zephydian is in the Dock), clicking the Dock icon brings that window forward instead.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
@@ -138,17 +188,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    /// Capture (19.10) starts with ⇧⌘6, once, if the person hasn't chosen a shortcut for it.
+    private func offerCaptureShortcut() {
+        for pack in PackLibrary.shared.packs where pack.manifest.capabilities?.contains("screen.record") == true {
+            PackServices.shared.shortcuts.offerDefault(packID: pack.id,
+                                                       KeyShortcut(keyCode: UInt16(kVK_ANSI_6), modifiers: [.shift, .command], key: "6"))
+        }
+    }
+
+    /// The Settings window (⌘, and the menu bar's Settings…).
     func openSettings() {
         guard !model.isOnboarding else { return }
-        model.tab = .settings
-        panel.show()
+        settingsWindow.show()
     }
 
     private func applySettings() {
+        UserDefaults.standard.set(settings.usesGlass, forKey: SwitcherKit.Keys.liquidGlassEnabled)   // the cut-files panel's look
         statusItem.apply(icon: settings.menuBarIcon)
         statusItem.setServiceActive(PackServices.shared.colorsJet, color: settings.accentNSColor)
         cornerTrigger.reposition()
         panel.applyAppearance()
+        settingsWindow?.applyAppearance()
         PackServices.shared.windows.applyAppearance(settings.appearance.nsAppearance)
         panel.applyMaterial()
         panel.reposition()
