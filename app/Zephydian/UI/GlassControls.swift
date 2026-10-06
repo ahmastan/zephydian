@@ -164,6 +164,10 @@ struct SegmentedControl<Value: Hashable>: View {
     /// Liquid Glass mode only: the track itself is a glass bar (the panel's top tab bar),
     /// with the glass bubble sliding on top of it.
     var glassTrack = false
+    /// An icon per option. With `iconOnly`, segments show just the icon (the name becomes the
+    /// tooltip and the VoiceOver label), for bars too crowded for words.
+    var icon: ((Value) -> AnyView)? = nil
+    var iconOnly = false
 
     @Environment(SettingsStore.self) private var settings
     @Environment(\.colorScheme) private var colorScheme
@@ -198,16 +202,26 @@ struct SegmentedControl<Value: Hashable>: View {
     private func segment(_ option: Value) -> some View {
         let isSelected = option == selection
         return Button { selection = option } label: {
-            Text(title(option))
-                .font(.system(size: fontSize, weight: isSelected ? .semibold : .medium))
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-                .foregroundStyle(isSelected ? .primary : .secondary)
-                .frame(maxWidth: .infinity)
-                .frame(height: height - 6)
-                .contentShape(Rectangle())
+            Group {
+                if iconOnly, let icon {
+                    icon(option)
+                        .frame(width: fontSize + 5, height: fontSize + 5)
+                        .opacity(isSelected ? 1 : 0.7)
+                } else {
+                    Text(title(option))
+                        .font(.system(size: fontSize, weight: isSelected ? .semibold : .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+            }
+            .foregroundStyle(isSelected ? .primary : .secondary)
+            .frame(maxWidth: .infinity)
+            .frame(height: height - 6)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help(iconOnly ? title(option) : "")
+        .accessibilityLabel(title(option))
         .background {
             if isSelected {
                 selectionShape.matchedGeometryEffect(id: "selection", in: namespace)

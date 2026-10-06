@@ -7,6 +7,15 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-06
+
+### Added
+- **Radial Menu** (Settings → Features): a wheel of slices around the pointer, opened by a shortcut or a mouse button. Hold, point and let go, or click; arrow keys, number keys and Esc work too. Slices can open apps, files, folders and links, run your utilities and Zephydian features, flip quick toggles, arrange windows, press media keys or any key combination, paste a snippet, run a shortcut from the Shortcuts app, or show what's playing. Folders hold more slices. Build each wheel in Settings with a live preview: add slices by kind, drag them into order, rename them and pick their icons. Make several wheels (from scratch or from ready-made sets), each with its own color, shortcut and button; choose the size, the highlight's strength and where the wheel appears. A Notes slice opens Notes in its own window.
+- **Choose the panel's tabs**: in Settings → Panel & Corner → Tabs, add your favorite games, utilities and Mac features (Sound, Brightness, Quick Toggles, Window Layout, Snippets, Shelf, Camera Mirror and more) as tabs of their own (up to 8 tabs; past 4 they show as icons), hide any of Games, Utilities, Notes and Settings, and drag them into your own order. ⌘1, ⌘2… follow the tabs that show, and with a single tab left the panel shows just that page.
+
+### Changed
+- **Screenshots go to the clipboard at once.** Every shot Capture takes is copied as soon as it's taken, ready to paste. "Copy automatically" in Capture's settings is now on for everyone (switch it off there if you'd rather not).
+
 ## [0.7.0] - 2026-10-05
 
 ### Added

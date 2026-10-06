@@ -2,18 +2,24 @@ import SwiftUI
 
 /// The shared game chrome: back · name · score · pause, the game, and a hint line.
 struct GameScreen: View {
+    /// False in a game or utility tab, which has nothing to go back to.
+    var showsBack = true
     @Environment(AppModel.self) private var model
 
     var body: some View {
         if let session = model.gameSession, let info = GameRegistry.info(for: model.gameID) {
             VStack(spacing: 0) {
                 HStack(spacing: 6) {
-                    Button { model.closeGame() } label: {
-                        Image(systemName: "chevron.left")
+                    if showsBack {
+                        Button { model.closeGame() } label: {
+                            Image(systemName: "chevron.left")
+                        }
+                        .glassIconButtonStyle()
+                        .help("Back to \(model.backDestination) (Esc)")
+                        .accessibilityLabel("Back to \(model.backDestination)")
+                    } else {
+                        Spacer().frame(width: 6)
                     }
-                    .glassIconButtonStyle()
-                    .help("Back to \(model.backDestination) (Esc)")
-                    .accessibilityLabel("Back to \(model.backDestination)")
 
                     Text(info.name).font(.system(size: 15, weight: .semibold))
                     Spacer()

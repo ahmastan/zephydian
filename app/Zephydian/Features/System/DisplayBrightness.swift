@@ -311,8 +311,11 @@ final class BrightnessEngine: FeatureEngine {
     }
 }
 
-private struct BrightnessPopover: View {
+/// A slider per display: the menu bar popover, and the panel's Brightness tab.
+struct BrightnessPopover: View {
     let engine: BrightnessEngine
+    /// The popover's fixed width; nil fills the panel's tab.
+    var width: CGFloat? = 320
 
     var body: some View {
         let model = engine.model
@@ -339,7 +342,7 @@ private struct BrightnessPopover: View {
             }
         }
         .padding(16)
-        .frame(width: 320)
+        .frame(width: width)
     }
 
     private func note(_ display: BrightnessDisplay, _ level: Double) -> String {

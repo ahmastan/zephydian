@@ -41,7 +41,7 @@ enum SettingsPage: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .general: ["Launch at login", "Welcome tour", "Version", "Quit", "GitHub", "Website", "About"]
         case .appearance: ["Mode", "Light", "Dark", "Panel style", "Liquid Glass", "Frosted", "Accent", "Color", "Menu bar icon"]
-        case .panel: ["Corner", "Hot Corners", "Delay", "Display", "Panel size", "Small", "Medium", "Large", "Auto-hide", "Hide delay"]
+        case .panel: ["Corner", "Hot Corners", "Delay", "Display", "Panel size", "Small", "Medium", "Large", "Auto-hide", "Hide delay", "Tabs", "Order", "Hide tabs"]
         case .shortcuts: ["Keyboard shortcut", "Open the panel", "Hotkey", "Clipboard", "Screenshot", "Dictionary"]
         case .notes: ["Monospace font", "Notes window", "On top"]
         case .games: ["High-contrast colors", "Five", "Stats", "Library"]

@@ -5,8 +5,8 @@ import UniformTypeIdentifiers
 /// Screenshots for the `screen.capture` capability. Area and Window modes show Zephydian's own
 /// selection overlay; the picture itself comes from ScreenCaptureKit, with Zephydian's windows
 /// (panel, overlay, preview card) left out. macOS asks once for the Screen Recording permission.
-/// After a capture a preview card offers Copy, Save, Edit and Close; if it's ignored, the shot is
-/// copied. Shots are kept in memory for this session (the utility lists them); saved ones go to
+/// Each shot is copied to the clipboard at once (unless "Copy automatically" is off), and a preview
+/// card offers Copy, Save, Edit and Close; if it's ignored, the shot is copied. Shots are kept in memory for this session (the utility lists them); saved ones go to
 /// Pictures/Screenshots or a folder the person chose.
 final class ScreenCapture {
     enum Mode: String { case area, window, screen }
@@ -16,8 +16,11 @@ final class ScreenCapture {
         var pointer = false
         var sound = true
         var format = "png"         // or "jpeg"
-        /// Copy every shot to the clipboard as soon as it's taken.
-        var autoCopy = false
+        /// Copy every shot to the clipboard as soon as it's taken (on unless switched off).
+        var autoCopy = true
+        /// Saved with the prefs since copying became the default, so older saved prefs (where it was
+        /// off by default) get it switched on once.
+        var copiesByDefault = true
         /// Freeze the screen as a still picture while picking (moving things like videos stop).
         var freeze = false
         /// What the capture shortcut does: "bar" shows the capture bar, "instant" takes a shot at once.
@@ -25,7 +28,7 @@ final class ScreenCapture {
         /// The kind of shot the shortcut takes at once: "area", "window" or "screen".
         var instantMode = "area"
 
-        init(delay: Int = 0, pointer: Bool = false, sound: Bool = true, format: String = "png", autoCopy: Bool = false) {
+        init(delay: Int = 0, pointer: Bool = false, sound: Bool = true, format: String = "png", autoCopy: Bool = true) {
             self.delay = delay; self.pointer = pointer; self.sound = sound; self.format = format; self.autoCopy = autoCopy
         }
 
@@ -35,7 +38,9 @@ final class ScreenCapture {
             pointer = try c.decodeIfPresent(Bool.self, forKey: .pointer) ?? false
             sound = try c.decodeIfPresent(Bool.self, forKey: .sound) ?? true
             format = try c.decodeIfPresent(String.self, forKey: .format) ?? "png"
-            autoCopy = try c.decodeIfPresent(Bool.self, forKey: .autoCopy) ?? false
+            // Prefs saved before copying became the default had it off by default: switch it on once.
+            let current = try c.decodeIfPresent(Bool.self, forKey: .copiesByDefault) != nil
+            autoCopy = current ? (try c.decodeIfPresent(Bool.self, forKey: .autoCopy) ?? true) : true
             freeze = try c.decodeIfPresent(Bool.self, forKey: .freeze) ?? false
             shortcutAction = try c.decodeIfPresent(String.self, forKey: .shortcutAction) ?? "bar"
             instantMode = try c.decodeIfPresent(String.self, forKey: .instantMode) ?? "area"

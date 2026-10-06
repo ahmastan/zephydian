@@ -100,9 +100,16 @@ final class PanelController: NSObject {
     func show() {
         guard !isOpen else { return }
         isOpen = true
+        model.isPanelVisible = true
         armed = false
         typedInUtility = false
         if !model.isOnboarding {
+            // A hidden tab opened for a moment (by a shortcut) isn't where the panel opens next time.
+            if !settings.visibleTabs.contains(model.tab), !model.isShowingGame, !model.isShowingLibrary, !model.isShowingStats {
+                model.tab = settings.visibleTabs[0]
+            } else if let id = model.tab.itemID, !model.isShowingGame, !model.isShowingLibrary, !model.isShowingStats {
+                model.openGame(id)   // a game or utility tab (after a launch, say) shows its screen
+            }
             notes.reloadChangedFiles()
             model.panelOpenCount += 1
         }
@@ -116,6 +123,7 @@ final class PanelController: NSObject {
     func hide() {
         guard isOpen else { return }
         isOpen = false
+        model.isPanelVisible = false
         cancelAutoHide()
         stopClickMonitor()
         notes.flush()
@@ -308,6 +316,8 @@ final class PanelController: NSObject {
         // Boards scale with the room under a game's header and hint line, which keep their size.
         let base = Tokens.basePanelSize, chrome = Tokens.gameChromeHeight
         model.boardScale = min(size.width / base.width, (size.height - chrome) / (base.height - chrome))
+        // A game or utility tab: its tab bar (56 pt with its spacing) sits above the game's own header.
+        model.tabBoardScale = min(size.width / base.width, (size.height - chrome - 56) / (base.height - chrome))
         if model.isOnboarding {
             return NSRect(x: visible.midX - size.width / 2, y: visible.midY - size.height / 2,
                           width: size.width, height: size.height)
@@ -425,6 +435,8 @@ final class PanelController: NSObject {
             }
             if model.isOnboarding {
                 finishOnboarding()
+            } else if model.isShowingTabGame {
+                hide()   // a game or utility tab has nothing to go back to
             } else if model.isShowingGame {
                 model.closeGame()
             } else if model.isShowingStats {
@@ -453,17 +465,15 @@ final class PanelController: NSObject {
         }
         guard !model.isOnboarding else { return false }
         switch key {
-        case ",": model.openSettingsWindow(nil)   // ⌘, is the Settings window, as in every Mac app; ⌘4 is the short tab
-        case "1", "2", "3", "4":
+        case ",": model.openSettingsWindow(nil)   // ⌘, is the Settings window, as in every Mac app; the Settings tab is the short list
+        case "1", "2", "3", "4", "5", "6", "7", "8":
+            // ⌘1, ⌘2… follow the tabs as they're shown (the order and hidden tabs are the person's choice).
+            let tabs = settings.visibleTabs
+            guard let number = Int(key), number <= tabs.count else { return false }
             if model.isShowingGame { model.closeGame() }
             model.closeLibrary()
             model.closeStats()
-            model.tab = switch key {
-            case "1": .games
-            case "2": .utilities
-            case "3": .notes
-            default: .settings
-            }
+            model.tab = tabs[number - 1]
         case "w": hide()
         case "f" where model.isShowingLibrary && !model.isShowingGame: model.librarySearchRequest += 1
         case "z" where model.isShowingGame: return model.gameSession?.undo() ?? false

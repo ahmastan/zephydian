@@ -163,11 +163,20 @@ struct MouseButtonsSettingsView: View {
         AppListSection(title: "Apps left alone", empty: "Every app gets these mouse changes.", apps: $settings.mouseIgnoredApps)
     }
 
+    private func radialWheel(_ button: Int) -> String? {
+        guard Features.shared.isOn("radial-menu") else { return nil }
+        return RadialSettings.shared.wheel(forButton: button)?.name
+    }
+
     @ViewBuilder private func buttonRow(_ number: Int) -> some View {
         @Bindable var settings = settings
         let action = Binding(get: { settings.buttonActions[number] ?? MouseAction.none }, set: { settings.buttonActions[number] = $0 })
         Picker("Button \(number + 1)", selection: action) {
             ForEach(MouseAction.allCases) { Text($0.title).tag($0) }
+        }
+        if let wheel = radialWheel(number) {
+            Text("Opens the \(wheel) wheel (Radial Menu), which takes this button.")
+                .font(.callout).foregroundStyle(.secondary)
         }
         if action.wrappedValue == .shortcut {
             LabeledContent("Button \(number + 1) presses") {

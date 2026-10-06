@@ -116,6 +116,11 @@ extension ShortcutConflicts {
         if Features.shared.isOn("cleaning-mode"), excluding != "cleaning", let s = CleaningModeSettings.shared.shortcut { out["Cleaning mode"] = s }
         if Features.shared.isOn("command-bar"), excluding != "command-bar", let s = CommandBarSettings.shared.shortcut { out["The Command Bar"] = s }
         if Features.shared.isOn("quick-panel"), excluding != "quick-panel", let s = QuickPanelSettings.shared.shortcut { out["The Quick Panel"] = s }
+        if Features.shared.isOn("radial-menu") {
+            for wheel in RadialSettings.shared.wheels where excluding != "radial-\(wheel.id.uuidString)" {
+                if let s = wheel.shortcut { out["The \(wheel.name) wheel"] = s }
+            }
+        }
         if Features.shared.isOn("sound-mixer"), excluding != "sound-cycle", let s = SoundSettings.shared.cycleShortcut { out["Switch the sound output"] = s }
         if Features.shared.isOn("window-layout") {
             for (layout, shortcut) in WindowToolsSettings.shared.shortcuts where excluding != "layout-\(layout.rawValue)" {

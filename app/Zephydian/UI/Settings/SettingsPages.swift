@@ -164,7 +164,164 @@ private struct PanelPage: View {
             } footer: {
                 FooterNote(settings.autoHide.explanation)
             }
+            PanelTabsSection()
         }
+    }
+}
+
+/// The panel's tabs: which show and in what order (rows are dragged by the handle, or moved from
+/// their menu), and below them the games, utilities and features that can be added as tabs.
+private struct PanelTabsSection: View {
+    @Environment(SettingsStore.self) private var settings
+    @State private var dragging: PanelTab?
+    @State private var category = AddCategory.games
+
+    enum AddCategory: String, CaseIterable, Identifiable {
+        case games, utilities, features
+        var id: Self { self }
+        var title: String { rawValue.capitalized }
+    }
+
+    var body: some View {
+        Section {
+            ForEach(settings.tabOrder) { tab in
+                row(tab)
+                    .reorderable(tab, dragging: $dragging) { dragged, target in settings.tabOrder.move(dragged, onto: target) }
+            }
+        } header: {
+            HStack {
+                Text("Tabs")
+                Spacer()
+                Button("Reset") { settings.resetTabs() }
+                    .controlSize(.small)
+                    .disabled(settings.tabOrder == PanelTab.builtIns && settings.hiddenTabs.isEmpty)
+            }
+        } footer: {
+            FooterNote("Drag a tab by its handle to change the order; ⌘1, ⌘2… follow it. Up to \(PanelTab.maxShown) tabs show, and past 4 they show as icons. With one tab left, the panel shows just that page.")
+        }
+        Section {
+            Picker("Add a tab", selection: $category) {
+                ForEach(AddCategory.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            switch category {
+            case .games:
+                tiles(GameRegistry.all.filter { $0.makeSession != nil }.map { PanelTab.item($0.id) }, empty: "No games installed.")
+            case .utilities:
+                tiles(UtilityRegistry.all.map { PanelTab.item($0.id) }, empty: "No utilities installed. Get them from the Library.")
+            case .features:
+                ForEach(FeatureGroup.allCases) { group in
+                    let tabs = PanelTab.featureIDs.filter { Features.shared.feature($0)?.group == group }.map(PanelTab.feature)
+                    if !tabs.isEmpty {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(group.title).font(.caption).foregroundStyle(.secondary)
+                            tiles(tabs, empty: "")
+                        }
+                    }
+                }
+            }
+        } header: {
+            Text("Add a tab")
+        } footer: {
+            FooterNote(settings.canShowMoreTabs
+                       ? "Click one to add it as a tab; click a checked one to remove it. A feature that's off offers to switch on from its tab."
+                       : "\(PanelTab.maxShown) tabs show at most. Remove or hide one to add another.")
+        }
+    }
+
+    /// Games, utilities or features as tiles: click to add, click again (checked) to remove.
+    @ViewBuilder private func tiles(_ tabs: [PanelTab], empty: String) -> some View {
+        if tabs.isEmpty {
+            Text(empty).foregroundStyle(.secondary)
+        } else {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 8)], spacing: 8) {
+                ForEach(tabs) { tab in
+                    let added = settings.tabOrder.contains(tab)
+                    Button {
+                        if added { settings.removeTab(tab) } else { settings.addTab(tab) }
+                    } label: {
+                        VStack(spacing: 5) {
+                            PanelTabLabel.icon(tab).frame(width: 24, height: 24)
+                            Text(PanelTabLabel.title(tab))
+                                .font(.caption)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 62)
+                        .padding(.horizontal, 4)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(added ? settings.accentColor.opacity(0.15) : Color.primary.opacity(0.04)))
+                        .overlay(alignment: .topTrailing) {
+                            if added {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundStyle(settings.accentColor)
+                                    .padding(4)
+                            }
+                        }
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!added && !settings.canShowMoreTabs)
+                    .help(added ? "Remove the \(PanelTabLabel.title(tab)) tab" : "Add \(PanelTabLabel.title(tab)) as a tab")
+                    .accessibilityLabel(PanelTabLabel.title(tab))
+                    .accessibilityAddTraits(added ? .isSelected : [])
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func row(_ tab: PanelTab) -> some View {
+        let visible = settings.visibleTabs
+        let index = visible.firstIndex(of: tab)
+        let isLast = visible == [tab]
+        let installed = tab.itemID.map { GameRegistry.info(for: $0) != nil } ?? true
+        let full = index == nil && !settings.canShowMoreTabs
+        return HStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal")
+                .foregroundStyle(.secondary)
+                .help("Drag to change the order")
+                .accessibilityHidden(true)
+            Toggle(isOn: Binding(get: { !settings.hiddenTabs.contains(tab) }, set: { settings.setTab(tab, visible: $0) })) {
+                HStack(spacing: 6) {
+                    PanelTabLabel.icon(tab).frame(width: 18, height: 18)
+                    Text(PanelTabLabel.title(tab))
+                    if !installed {
+                        Text("Not installed").font(.caption).foregroundStyle(.orange)
+                    }
+                }
+            }
+            .toggleStyle(.checkbox)
+            .disabled(isLast || (full && settings.hiddenTabs.contains(tab)))
+            .help(isLast ? "At least one tab stays in the panel" : full ? "\(PanelTab.maxShown) tabs show at most" : "")
+            Spacer()
+            if let index, index < PanelTab.maxShown {
+                Text("⌘\(index + 1)").foregroundStyle(.secondary).monospacedDigit()
+            }
+            if tab.isAdded {
+                Button { settings.removeTab(tab) } label: { Image(systemName: "minus.circle") }
+                    .buttonStyle(.borderless)
+                    .help("Remove this tab")
+                    .accessibilityLabel("Remove the \(PanelTabLabel.title(tab)) tab")
+                    .disabled(isLast)
+            }
+        }
+        .contentShape(.rect)
+        .contextMenu {
+            Button("Move Up") { move(tab, by: -1) }.disabled(settings.tabOrder.first == tab)
+            Button("Move Down") { move(tab, by: 1) }.disabled(settings.tabOrder.last == tab)
+            if tab.isAdded {
+                Divider()
+                Button("Remove Tab", role: .destructive) { settings.removeTab(tab) }.disabled(isLast)
+            }
+        }
+        .accessibilityAction(named: "Move Up") { move(tab, by: -1) }
+        .accessibilityAction(named: "Move Down") { move(tab, by: 1) }
+    }
+
+    private func move(_ tab: PanelTab, by step: Int) {
+        guard let i = settings.tabOrder.firstIndex(of: tab), settings.tabOrder.indices.contains(i + step) else { return }
+        settings.tabOrder.swapAt(i, i + step)
     }
 }
 

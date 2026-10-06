@@ -25,6 +25,8 @@ final class MouseButtonsEngine: FeatureEngine {
             return button == 2 ? middle(type, event) : nil
         }
         guard type == .otherMouseDown, !settings.frontAppIgnoresMouse else { return event }
+        // A Radial Menu wheel opens with this button: its own tap takes it.
+        if RadialMenuEngine.claimedButtons.contains(Int(button)) { return event }
         if button == 2 {
             guard settings.middleDragEnabled else { return event }
             taken.insert(2)

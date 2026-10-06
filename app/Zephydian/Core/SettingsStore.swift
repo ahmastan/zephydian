@@ -80,6 +80,85 @@ nonisolated enum PanelStyle: String, CaseIterable, Identifiable {
     var cornerRadius: CGFloat { self == .glass ? 24 : 16 }
 }
 
+/// One of the panel's top tabs: a built-in page, one game or utility, or one Mac feature's controls.
+/// People choose which show and their order (Settings → Panel & Corner → Tabs), up to 8.
+nonisolated enum PanelTab: Hashable, Identifiable {
+    case games, utilities, notes, settings
+    /// A game or utility, by its registry id. It shows that game's or utility's screen.
+    case item(String)
+    /// A Mac feature's controls (Sound, Brightness, Quick Toggles…), by its feature id.
+    case feature(String)
+
+    /// The features that make sense as a tab: each has controls worth having one click away.
+    static let featureIDs = ["sound-mixer", "brightness", "quick-toggles", "quick-panel", "window-layout",
+                             "snippets", "shelf", "camera-mirror"]
+
+    static let builtIns: [PanelTab] = [.games, .utilities, .notes, .settings]
+    static let maxShown = 8
+
+    var id: String { rawValue }
+
+    /// Saved as "games", "notes"… or "item:<id>".
+    var rawValue: String {
+        switch self {
+        case .games: "games"
+        case .utilities: "utilities"
+        case .notes: "notes"
+        case .settings: "settings"
+        case .item(let id): "item:" + id
+        case .feature(let id): "feature:" + id
+        }
+    }
+
+    init?(rawValue: String) {
+        if rawValue.hasPrefix("feature:") {
+            let id = String(rawValue.dropFirst(8))
+            guard Self.featureIDs.contains(id) else { return nil }
+            self = .feature(id)
+            return
+        }
+        if rawValue.hasPrefix("item:") {
+            let id = String(rawValue.dropFirst(5))
+            guard !id.isEmpty else { return nil }
+            self = .item(id)
+            return
+        }
+        guard let tab = Self.builtIns.first(where: { $0.rawValue == rawValue }) else { return nil }
+        self = tab
+    }
+
+    var itemID: String? {
+        if case .item(let id) = self { return id }
+        return nil
+    }
+
+    var featureID: String? {
+        if case .feature(let id) = self { return id }
+        return nil
+    }
+
+    /// Added by the person (a game, utility or feature), so it can be removed, not only hidden.
+    var isAdded: Bool { !Self.builtIns.contains(self) }
+
+    /// The built-in tabs' names (a game's or utility's comes from the registry; see `PanelTabLabel`).
+    var title: String {
+        switch self {
+        case .item(let id), .feature(let id): id
+        default: rawValue.capitalized
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .games: "gamecontroller"
+        case .utilities: "wrench.and.screwdriver"
+        case .notes: "note.text"
+        case .settings: "gearshape"
+        case .item, .feature: "square.grid.2x2"
+        }
+    }
+}
+
 /// How big the panel is. Text keeps its size; game boards, notes and lists get more or less room.
 nonisolated enum PanelSize: String, CaseIterable, Identifiable {
     case small, medium, large
@@ -139,6 +218,52 @@ final class SettingsStore {
     var featuresIntroSeen: Bool { didSet { defaults.set(featuresIntroSeen, forKey: "featuresIntroSeen") } }
     var panelStyle: PanelStyle { didSet { defaults.set(panelStyle.rawValue, forKey: "panelStyle") } }
     var panelSize: PanelSize { didSet { defaults.set(panelSize.rawValue, forKey: "panelSize") } }
+    /// Every panel tab, in the order chosen (hidden ones keep their place for when they come back).
+    /// Built-in tabs are always in it; game and utility tabs are added and removed.
+    var tabOrder: [PanelTab] { didSet { defaults.set(tabOrder.map(\.rawValue), forKey: "tabOrder") } }
+    /// Tabs left out of the panel's tab bar. At least one tab always shows.
+    var hiddenTabs: Set<PanelTab> { didSet { defaults.set(hiddenTabs.map(\.rawValue).sorted(), forKey: "hiddenTabs") } }
+    /// Whether a game or utility tab's game or utility is installed (set by AppDelegate from the
+    /// registry; a removed one's tab is left out until it's back).
+    @ObservationIgnored var itemExists: (String) -> Bool = { _ in true }
+    /// The tabs the panel shows, in order (never empty, at most 8).
+    var visibleTabs: [PanelTab] {
+        let tabs = tabOrder.filter { !hiddenTabs.contains($0) && ($0.itemID.map(itemExists) ?? true) }
+        return tabs.isEmpty ? [.games] : Array(tabs.prefix(PanelTab.maxShown))
+    }
+    /// Whether another tab can be shown (8 at most).
+    var canShowMoreTabs: Bool {
+        tabOrder.filter { !hiddenTabs.contains($0) && ($0.itemID.map(itemExists) ?? true) }.count < PanelTab.maxShown
+    }
+    /// Shows or hides a tab. Hiding the last visible one, or showing a 9th, does nothing.
+    func setTab(_ tab: PanelTab, visible: Bool) {
+        if visible {
+            guard hiddenTabs.contains(tab), canShowMoreTabs else { return }
+            hiddenTabs.remove(tab)
+        } else if visibleTabs.count > 1 || !visibleTabs.contains(tab) {
+            hiddenTabs.insert(tab)
+        }
+    }
+    /// Adds a game, utility or feature as a tab, at the end and shown. Refused past 8 shown tabs.
+    @discardableResult
+    func addTab(_ tab: PanelTab) -> Bool {
+        guard tab.isAdded else { return false }
+        guard canShowMoreTabs || (tabOrder.contains(tab) && !hiddenTabs.contains(tab)) else { return false }
+        if !tabOrder.contains(tab) { tabOrder.append(tab) }
+        hiddenTabs.remove(tab)
+        return true
+    }
+    /// Removes an added tab (built-in tabs can only be hidden).
+    func removeTab(_ tab: PanelTab) {
+        guard tab.isAdded else { return }
+        tabOrder.removeAll { $0 == tab }
+        hiddenTabs.remove(tab)
+    }
+    /// Back to the four built-in tabs in their first order (added tabs are removed).
+    func resetTabs() {
+        tabOrder = PanelTab.builtIns
+        hiddenTabs = []
+    }
     /// The panel's global shortcut, recorded by the person (nil = none).
     var panelShortcut: KeyShortcut? { didSet { defaults.set(try? JSONEncoder().encode(panelShortcut), forKey: "panelShortcut") } }
 
@@ -168,6 +293,16 @@ final class SettingsStore {
         featuresIntroSeen = defaults.bool(forKey: "featuresIntroSeen")
         panelStyle = value("panelStyle", .glass)
         panelSize = value("panelSize", .medium)
+        // Unknown names are dropped and missing tabs added at the end, so a newer or older version's list still works.
+        var order: [PanelTab] = []
+        for tab in (defaults.stringArray(forKey: "tabOrder") ?? []).compactMap(PanelTab.init(rawValue:)) where !order.contains(tab) {
+            order.append(tab)
+        }
+        let allTabs = order + PanelTab.builtIns.filter { !order.contains($0) }
+        tabOrder = allTabs
+        let hidden = Set((defaults.stringArray(forKey: "hiddenTabs") ?? []).compactMap(PanelTab.init(rawValue:)))
+            .filter(allTabs.contains)
+        hiddenTabs = allTabs.allSatisfy(hidden.contains) ? [] : hidden
         // Worked out first and assigned once: in an @Observable class even this assignment saves.
         var shortcut = defaults.data(forKey: "panelShortcut").flatMap { try? JSONDecoder().decode(KeyShortcut?.self, from: $0) } ?? nil
         // Before any key could be recorded there were three choices; keep the one picked.

@@ -24,8 +24,8 @@ settings:
     SWIFT_VERSION: "6.0"
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor   # UI code runs on the main thread by default
     SWIFT_APPROACHABLE_CONCURRENCY: YES
-    MARKETING_VERSION: 0.7.0                   # the version users see
-    CURRENT_PROJECT_VERSION: 8                 # build number, bump every release
+    MARKETING_VERSION: 0.8.0                   # the version users see
+    CURRENT_PROJECT_VERSION: 9                 # build number, bump every release
 
 packages:
   # The app switcher and Finder cut and paste, copied from Vorssaint (GPL-3.0-or-later). A package of
@@ -43,6 +43,13 @@ targets:
         type: syncedFolder
     dependencies:
       - package: SwitcherKit
+      # Copied into Contents/Frameworks; Resources/now-playing.pl loads it into /usr/bin/perl.
+      - target: ZephydianNowPlaying
+        embed: true
+        link: false
+        codeSign: true
+        copy:
+          destination: frameworks
     info:
       path: Config/Info.plist
       properties:
@@ -91,3 +98,33 @@ targets:
           STRIP_INSTALLED_PRODUCT: YES
           STRIP_STYLE: non-global
     scheme: {}
+
+  # Reads what's playing (title, artwork) for the Radial Menu's now-playing slice. Copied from
+  # Vorssaint (GPL-3.0-or-later). Since macOS 15.4 only Apple-signed programs may read Now Playing,
+  # so the app never loads this itself: it runs /usr/bin/perl with Resources/now-playing.pl, which
+  # loads this library and prints one JSON line. Swift 5 mode, as Vorssaint wrote it.
+  ZephydianNowPlaying:
+    type: library.dynamic
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: NowPlaying
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated
+        SWIFT_APPROACHABLE_CONCURRENCY: NO
+        PRODUCT_NAME: ZephydianNowPlaying
+        EXECUTABLE_PREFIX: lib
+        PRODUCT_BUNDLE_IDENTIFIER: com.ahmastan.zephydian.now-playing
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        DYLIB_INSTALL_NAME_BASE: "@rpath"
+        SKIP_INSTALL: YES
+        DEAD_CODE_STRIPPING: YES
+      configs:
+        Release:
+          DEPLOYMENT_POSTPROCESSING: YES
+          STRIP_INSTALLED_PRODUCT: YES
+          STRIP_STYLE: non-global
