@@ -241,8 +241,11 @@ final class QuickPanel {
     }
 }
 
-private struct QuickPanelView: View {
+/// The Quick Panel's grid: on its own floating panel, and as the corner panel's Quick Panel tab.
+struct QuickPanelView: View {
     let model: QuickPanelModel
+    /// 4 on the floating panel; 3 fit the corner panel's tab.
+    var columns = QuickPanel.columns
     @State private var toggles = QuickToggles.shared
     @State private var settings = QuickPanelSettings.shared
     @FocusState private var focused: Bool
@@ -272,7 +275,7 @@ private struct QuickPanelView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .padding(.horizontal, QuickPanel.padding)
             } else {
-                LazyVGrid(columns: Array(repeating: GridItem(.fixed(QuickPanel.tile.width), spacing: QuickPanel.spacing), count: QuickPanel.columns),
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(QuickPanel.tile.width), spacing: QuickPanel.spacing), count: columns),
                           spacing: QuickPanel.spacing) {
                     ForEach(Array(tiles.enumerated()), id: \.element.id) { index, tile in
                         tileView(tile, selected: index == model.selection)
@@ -288,8 +291,8 @@ private struct QuickPanelView: View {
         .onAppear { focused = true }
         .onKeyPress(.leftArrow) { model.moveSelection(-1); return .handled }
         .onKeyPress(.rightArrow) { model.moveSelection(1); return .handled }
-        .onKeyPress(.upArrow) { model.moveSelection(-QuickPanel.columns); return .handled }
-        .onKeyPress(.downArrow) { model.moveSelection(QuickPanel.columns); return .handled }
+        .onKeyPress(.upArrow) { model.moveSelection(-columns); return .handled }
+        .onKeyPress(.downArrow) { model.moveSelection(columns); return .handled }
         .onKeyPress(.return) {
             if model.visible.indices.contains(model.selection) { model.run(model.visible[model.selection]) }
             return .handled

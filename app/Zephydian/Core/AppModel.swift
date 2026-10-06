@@ -7,8 +7,27 @@ import Observation
 final class AppModel {
     typealias Tab = PanelTab
 
-    /// The selected tab, remembered between launches.
-    var tab: Tab { didSet { UserDefaults.standard.set(tab.rawValue, forKey: "lastTab") } }
+    /// The selected tab, remembered between launches. A game or utility tab opens its screen under
+    /// the tab bar; leaving it pauses it (one game or utility is kept at a time, as from the grids).
+    var tab: Tab {
+        didSet {
+            UserDefaults.standard.set(tab.rawValue, forKey: "lastTab")
+            if let id = tab.itemID {
+                openGame(id)
+            } else if oldValue.itemID != nil, isTabGame(oldValue) {
+                closeGame()
+            }
+        }
+    }
+
+    /// The game or utility on screen is the one the selected tab holds (drawn under the tab bar,
+    /// without a back button).
+    var isShowingTabGame: Bool { isTabGame(tab) }
+
+    private func isTabGame(_ tab: Tab) -> Bool {
+        guard let id = tab.itemID else { return false }
+        return isShowingGame && gameID == id
+    }
     /// The Settings window's page or feature (remembered between openings).
     var settingsSelection: SettingsSelection { didSet { UserDefaults.standard.set(settingsSelection.rawValue, forKey: "settingsPage") } }
 
@@ -24,10 +43,15 @@ final class AppModel {
     /// True while a note tab's name is being edited (Esc cancels the rename instead of closing the panel).
     var isRenamingNote = false
 
+    /// The panel is on screen (feature tabs run their live parts, like the camera, only then).
+    var isPanelVisible = false
+
     /// Increases every time the panel opens, so views can react (e.g. focus the notes editor).
     var panelOpenCount = 0
     /// The panel's size compared with the Medium size, for game boards (see `EnvironmentValues.boardScale`).
     var boardScale: CGFloat = 1
+    /// The same for a game or utility tab, which has the tab bar above it instead of the panel's header.
+    var tabBoardScale: CGFloat = 1
     /// Notes: the search field and results are showing instead of the tabs and editor (⌘F).
     var isSearchingNotes = false
 

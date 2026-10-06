@@ -25,10 +25,10 @@
   - **Windows and Dock:** Dock Preview (hover an app in the Dock to see its windows), an App Switcher for ⌘Tab with live previews, Window Layout (snap windows with shortcuts, ⌥-drag to move), Maximize with the Green Button, Quit Protection, Quit on Close and Focus Follows Mouse.
   - **Keyboard and mouse:** Text Snippets, a Super Key on Caps Lock, smooth Scrolling, Mouse Buttons, Three-Finger Middle Click, No Mouse Acceleration, and filters for a worn mouse or keyboard.
   - **Clipboard and files:** Clean URLs, Paste as Plain Text, Auto-Clear Clipboard, a Shelf for dragged files, Finder Shortcuts (cut and paste files with ⌘X and ⌘V, rename with F2) and a Disk Image Installer.
-  - **Everyday tools:** a Command Bar (⌥Space), a Quick Panel, Quick Toggles, Cleaning Mode and a Camera Mirror.
+  - **Everyday tools:** a Command Bar (⌥Space), a Radial Menu (a wheel of your apps, folders, links, utilities and actions around the pointer, from a shortcut or a mouse button), a Quick Panel, Quick Toggles, Cleaning Mode and a Camera Mirror.
   - **System and sound:** a Sound Mixer with per-app volume, Headphones Safety, Music Blocker, Display Brightness for every display, Bluetooth Off in Sleep, Menu Bar Stats and System Alerts.
 - **Games you choose.** Snake, Stackr (block stacking) and Five (5-letter word guess) come installed. Spokes (letter-wheel crosswords), Fleet (sea battle), Airship (top-down shooter), 2048 (slide and merge numbers), Mines (clear the minefield), Nines (number-placement puzzles) and Switch (turn every light off) are a click away in the **Library**, with more games on the way. Remove any game you don't play. A **Stats** screen shows your games played, wins, best scores and streaks.
-- **Make it yours.** Light, dark, or system appearance, accent color themes (or your Mac's own accent color, followed live), a small, medium or large panel, Liquid Glass or frosted panel (macOS 26+), and a choice of menu bar icon (or none at all).
+- **Make it yours.** Light, dark, or system appearance, accent color themes (or your Mac's own accent color, followed live), a small, medium or large panel, the panel's tabs in your order (add your favorite games, utilities and features like Sound or Quick Toggles as tabs, hide the ones you don't use), Liquid Glass or frosted panel (macOS 26+), and a choice of menu bar icon (or none at all).
 - **Keyboard shortcuts you pick.** Record any key combination for the panel, the utilities and every feature. Zephydian tells you right under the field if something else on your Mac already uses it.
 - **Featherweight.** Native Swift and SwiftUI. A small app, ~30 MB memory, and ~0.1% CPU when idle with features off. Each feature runs only while it's switched on, and games pause the moment the panel hides.
 - **Private.** No accounts and no tracking. Zephydian goes online only to download games and utilities you pick from the Library and about once a day to update them (you can turn that off), and when you ask a utility to: System's public IP and speed test, App Updates checking versions, and Homebrew. Nothing about you is sent. Everything else stays on your Mac.
@@ -39,7 +39,7 @@ Zephydian asks for a macOS permission only when you switch on something that nee
 
 | Permission | Used by |
 | --- | --- |
-| Accessibility | Most Mac features: Dock Preview, the App Switcher, window tools, keyboard and mouse features, Paste as Plain Text, Finder Shortcuts, Cleaning Mode, and the Command Bar's menu search |
+| Accessibility | Most Mac features: Dock Preview, the App Switcher, window tools, keyboard and mouse features, Paste as Plain Text, Finder Shortcuts, Cleaning Mode, the Command Bar's menu search, and the Radial Menu's mouse buttons and the slices that press keys or move windows |
 | Screen Recording | Capture, and window previews in Dock Preview and the App Switcher |
 | Microphone | Capture's recordings, when you include the microphone |
 | Camera | Camera Mirror |
@@ -141,7 +141,7 @@ Bug reports, utility and game ideas, and pull requests are welcome. New games an
 
 Zephydian is free software under the [GNU General Public License v3.0 or later](LICENSE) © 2026 ahmastan. You may use, share and change it; if you share a changed version, it must stay under the same license with its source code available. Versions up to 0.6.0 were released under the MIT License, which still applies to those releases.
 
-The app switcher and Finder cut and paste (`app/SwitcherKit/`) come from [Vorssaint](https://github.com/vorssaint/vorssaint-utils) by Vorssaint, under the GPL-3.0-or-later. Zephydian is not affiliated with or endorsed by Vorssaint.
+The app switcher and Finder cut and paste (`app/SwitcherKit/`), the Radial Menu's slice geometry, and the Now Playing reader (`app/NowPlaying/`) come from [Vorssaint](https://github.com/vorssaint/vorssaint-utils) by Vorssaint, under the GPL-3.0-or-later. Zephydian is not affiliated with or endorsed by Vorssaint.
 
 Word lists are derived from [SCOWL](http://wordlist.aspell.net/) by Kevin Atkinson, and Passwords uses the [EFF Large Wordlist](https://www.eff.org/dice) (CC BY 3.0). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 

@@ -21,6 +21,8 @@ struct RadialSlice: Identifiable {
 enum RadialActions {
     /// Wired by AppDelegate.
     static var showPanel: () -> Void = {}
+    /// Opens Notes in its own window (Notes then stay there, as with the panel's own button).
+    static var openNotesWindow: () -> Void = {}
 
     /// The slices that can run right now (an uninstalled utility or a feature that's off is left out).
     static func slices(_ items: [RadialItem]) -> [RadialSlice] {
@@ -116,6 +118,33 @@ enum RadialActions {
             slice.detail = "Now playing"
             if !custom { slice.icon = .symbol("music.note") }
         }
+    }
+
+    /// For the editor: how a slice reads even when it can't run now, and why it's left off the wheel.
+    static func editorInfo(_ item: RadialItem) -> (slice: RadialSlice, problem: String?) {
+        if let slice = slice(item) {
+            let blocked = needsAccessibility(item.kind) && !Permissions.shared.isGranted(.accessibility)
+            return (slice, blocked ? "Needs Accessibility (Settings → Permissions)" : nil)
+        }
+        let name = (item.path as NSString).lastPathComponent.replacingOccurrences(of: ".app", with: "")
+        let (title, detail, problem): (String, String, String) = switch item.kind {
+        case .app: (name.isEmpty ? "App" : name, "App", "Not found on this Mac")
+        case .file: (name.isEmpty ? "File" : name, "File", "Not found on this Mac")
+        case .url: (item.payload.isEmpty ? "Link" : item.payload, "Link", "Not a valid web address")
+        case .utility: (item.payload, "Utility", "Not installed (get it from the Library)")
+        case .feature:
+            (RadialFeatureAction(rawValue: item.payload)?.title ?? "Feature", "Zephydian",
+             RadialFeatureAction(rawValue: item.payload)?.featureID.flatMap { Features.shared.feature($0)?.name }
+                .map { "Switch on \($0) in Features" } ?? "Needs the Capture utility")
+        case .quickToggle: (QuickToggle(rawValue: item.payload)?.title ?? "Quick toggle", "Quick toggle", "Not available on this Mac")
+        case .folder: (item.name.isEmpty ? "Folder" : item.name, "Folder", "Empty, so it's left off the wheel")
+        case .keys: ("Keys", "Keys", "No keys chosen")
+        case .shortcut: ("Shortcut", "Shortcut", "No shortcut chosen")
+        case .snippet: ("Snippet", "Snippet", "This snippet was deleted")
+        case .windowLayout, .media, .nowPlaying: ("Slice", item.kind.rawValue, "Not understood by this version")
+        }
+        let icon = RadialIcon.symbol(item.symbol.isEmpty ? "questionmark.circle" : item.symbol)
+        return (RadialSlice(item: item, title: item.name.isEmpty ? title : item.name, detail: detail, icon: icon), problem)
     }
 
     static func isAvailable(_ action: RadialFeatureAction) -> Bool {
@@ -218,6 +247,7 @@ enum RadialActions {
     private static func run(_ action: RadialFeatureAction) {
         switch action {
         case .panel: showPanel()
+        case .notes: openNotesWindow()
         case .capture: if let id = capturePack?.id { PackServices.shared.capture.openBar(packID: id) }
         case .shelf: ShelfEngine.current?.toggle()
         case .cameraMirror: CameraMirrorEngine.current?.toggle()

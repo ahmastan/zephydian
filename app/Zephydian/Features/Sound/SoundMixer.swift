@@ -259,8 +259,11 @@ nonisolated extension AppAudioRoute: RouteStopping { func stopRoute() { stop() }
 
 // MARK: - The popover
 
-private struct SoundPopover: View {
+/// The volume, the output and each app's volume: the menu bar popover, and the panel's Sound tab.
+struct SoundPopover: View {
     let engine: SoundMixerEngine
+    /// The popover's fixed width; nil fills the panel's tab.
+    var width: CGFloat? = 340
     @State private var settings = SoundSettings.shared
 
     var body: some View {
@@ -294,7 +297,7 @@ private struct SoundPopover: View {
             }
         }
         .padding(16)
-        .frame(width: 340)
+        .frame(width: width)
     }
 }
 

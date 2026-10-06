@@ -55,11 +55,12 @@ struct Lossy<T: Decodable>: Decodable {
 
 /// Zephydian's own actions a slice can run. Raw values are saved.
 enum RadialFeatureAction: String, CaseIterable {
-    case panel, capture, shelf, cameraMirror, commandBar, quickPanel, cleaningMode
+    case panel, notes, capture, shelf, cameraMirror, commandBar, quickPanel, cleaningMode
 
     var title: String {
         switch self {
         case .panel: "Zephydian Panel"
+        case .notes: "Notes"
         case .capture: "Capture"
         case .shelf: "Shelf"
         case .cameraMirror: "Camera Mirror"
@@ -72,6 +73,7 @@ enum RadialFeatureAction: String, CaseIterable {
     var symbol: String {
         switch self {
         case .panel: "rectangle.inset.topright.filled"
+        case .notes: "note.text"
         case .capture: "camera.viewfinder"
         case .shelf: "tray.and.arrow.down"
         case .cameraMirror: "web.camera"
@@ -84,7 +86,7 @@ enum RadialFeatureAction: String, CaseIterable {
     /// The feature that must be on for it to work (nil: always works).
     var featureID: String? {
         switch self {
-        case .panel, .capture: nil
+        case .panel, .notes, .capture: nil
         case .shelf: "shelf"
         case .cameraMirror: "camera-mirror"
         case .commandBar: "command-bar"
@@ -180,6 +182,42 @@ struct RadialWheel: Codable, Identifiable, Equatable {
         shortcut = try? c.decodeIfPresent(KeyShortcut.self, forKey: .shortcut)
         mouseButton = try? c.decodeIfPresent(Int.self, forKey: .mouseButton)
         items = (try c.decodeIfPresent([Lossy<RadialItem>].self, forKey: .items) ?? []).compactMap(\.value)
+    }
+
+    /// Most slices on one level, and how deep folders go (a folder can hold one more level of folders).
+    static let maxSlices = 12
+    static let maxFolderDepth = 2
+
+    /// The slices inside the folders along `path` (folder ids from the top level); the top level for [].
+    func items(at path: [UUID]) -> [RadialItem] {
+        var level = items
+        for id in path {
+            guard let folder = level.first(where: { $0.id == id }) else { return [] }
+            level = folder.children
+        }
+        return level
+    }
+
+    /// Changes the slices inside the folders along `path`.
+    mutating func update(at path: [UUID], _ change: (inout [RadialItem]) -> Void) {
+        Self.update(&items, path: path[...], change)
+    }
+
+    private static func update(_ level: inout [RadialItem], path: ArraySlice<UUID>, _ change: (inout [RadialItem]) -> Void) {
+        guard let id = path.first else { return change(&level) }
+        guard let index = level.firstIndex(where: { $0.id == id }) else { return }
+        update(&level[index].children, path: path.dropFirst(), change)
+    }
+
+    /// A copy with new ids throughout and no triggers (a shortcut or button opens one wheel only).
+    func duplicate(named name: String) -> RadialWheel {
+        func renew(_ item: RadialItem) -> RadialItem {
+            var copy = item
+            copy.id = UUID()
+            copy.children = item.children.map(renew)
+            return copy
+        }
+        return RadialWheel(name: name, color: color, items: items.map(renew))
     }
 
     /// The wheel people get first: everyday apps and folders, the panel, Capture and Dark Mode.
@@ -313,6 +351,8 @@ final class RadialSettings {
     static let shared = RadialSettings()
 
     static let defaultHighlight = 0.42
+    /// One hot key id each (800 and up).
+    static let maxWheels = 12
 
     var wheels: [RadialWheel] { didSet { save(wheels, "radial.wheels") } }
     var size: RadialSize { didSet { defaults.set(size.rawValue, forKey: "radial.size") } }

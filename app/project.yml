@@ -24,8 +24,8 @@ settings:
     SWIFT_VERSION: "6.0"
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor   # UI code runs on the main thread by default
     SWIFT_APPROACHABLE_CONCURRENCY: YES
-    MARKETING_VERSION: 0.7.0                   # the version users see
-    CURRENT_PROJECT_VERSION: 8                 # build number, bump every release
+    MARKETING_VERSION: 0.8.0                   # the version users see
+    CURRENT_PROJECT_VERSION: 9                 # build number, bump every release
 
 packages:
   # The app switcher and Finder cut and paste, copied from Vorssaint (GPL-3.0-or-later). A package of

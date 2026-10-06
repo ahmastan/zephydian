@@ -42,6 +42,8 @@ struct RadialMenuView: View {
     let model: RadialMenuModel
     /// A click, in points from the center (y up).
     let onClick: (CGFloat, CGFloat) -> Void
+    /// The editor's live preview in Settings: a plain disc (no glass on Settings pages), no margin.
+    var preview = false
 
     @State private var radial = RadialSettings.shared
     @Environment(SettingsStore.self) private var settings
@@ -51,6 +53,7 @@ struct RadialMenuView: View {
     private var s: CGFloat { model.scale }
     private var diameter: CGFloat { RadialLayout.wheelDiameter * s }
     private var color: Color { model.wheel.color.color(accent: settings.accentColor) }
+    private var side: CGFloat { preview ? diameter : model.side }
 
     var body: some View {
         ZStack {
@@ -66,10 +69,10 @@ struct RadialMenuView: View {
             }
             .frame(width: diameter, height: diameter)
         }
-        .frame(width: model.side, height: model.side)
+        .frame(width: side, height: side)
         .contentShape(Rectangle())
         .onTapGesture(coordinateSpace: .local) { point in
-            onClick(point.x - model.side / 2, model.side / 2 - point.y)
+            onClick(point.x - side / 2, side / 2 - point.y)
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(model.wheel.name) wheel")
@@ -77,7 +80,18 @@ struct RadialMenuView: View {
 
     // MARK: Pieces
 
-    private var disc: some View {
+    @ViewBuilder private var disc: some View {
+        if preview {
+            Circle()
+                .fill(Color(nsColor: .controlBackgroundColor))
+                .overlay(Circle().strokeBorder(.separator, lineWidth: 1))
+                .frame(width: diameter, height: diameter)
+        } else {
+            liveDisc
+        }
+    }
+
+    private var liveDisc: some View {
         Circle()
             .fill(.clear)
             .frame(width: diameter, height: diameter)

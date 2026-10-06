@@ -1,10 +1,12 @@
 import SwiftUI
 
-/// Radial Menu's settings: the options shared by every wheel, then each wheel's triggers.
-/// (Editing a wheel's slices and adding wheels comes with the wheel editor.)
+/// Radial Menu's settings: the options shared by every wheel, then one wheel at a time (picked at
+/// the top): its name, color and triggers, and its slices in the editor.
 struct RadialMenuSettingsView: View {
     @State private var settings = RadialSettings.shared
     @State private var input = InputSettings.shared
+    @State private var selectedID: UUID?
+    @State private var confirmingDelete = false
     @Environment(SettingsStore.self) private var appSettings
 
     var body: some View {
@@ -52,23 +54,11 @@ struct RadialMenuSettingsView: View {
             Text(settings.mode.explanation + " Holding works with shortcuts that use ⌘, ⌥, ⌃ or ⇧, and with mouse buttons.")
                 .font(.callout).foregroundStyle(.secondary)
         }
-        ForEach($settings.wheels) { $wheel in
-            wheelSection($wheel)
-        }
-        Section {
-            LabeledContent("Add a wheel") {
-                Menu("New Wheel") {
-                    ForEach(RadialStarter.allCases.filter { $0 != .blank }) { starter in
-                        Button(starter.title) { add(starter) }
-                    }
-                }
-                .fixedSize()
-                .disabled(settings.wheels.count >= 12)
-            }
-        } footer: {
-            Text("Each wheel has its own shortcut and mouse button. A new wheel starts from a ready-made set; choosing its slices yourself comes next.")
-                .font(.callout).foregroundStyle(.secondary)
-        }
+        wheelsSection
+        let wheel = binding(selected.id)
+        wheelSection(wheel)
+        RadialSlicesEditor(wheel: wheel)
+            .id(selected.id)
         Section {
             LabeledContent("While a wheel is open") {
                 Text("Point and click, or ← → and ↵. 1–9, 0, - and = pick slices 1 to 12. Esc closes; ⌫ or Esc leaves a folder.")
@@ -79,19 +69,76 @@ struct RadialMenuSettingsView: View {
         }
     }
 
-    /// A new wheel from a starter set, named so it doesn't repeat another's name.
-    private func add(_ starter: RadialStarter) {
-        var wheel = starter.makeWheel()
+    /// The wheel being edited (the first one until another is picked).
+    private var selected: RadialWheel {
+        settings.wheels.first { $0.id == selectedID } ?? settings.wheels[0]
+    }
+
+    /// One wheel by id, safe while wheels are added and removed.
+    private func binding(_ id: UUID) -> Binding<RadialWheel> {
+        Binding(get: { settings.wheels.first { $0.id == id } ?? RadialWheel() },
+                set: { wheel in
+                    if let index = settings.wheels.firstIndex(where: { $0.id == id }) { settings.wheels[index] = wheel }
+                })
+    }
+
+    private var wheelsSection: some View {
+        Section {
+            Picker("Wheel", selection: Binding(get: { selected.id }, set: { selectedID = $0 })) {
+                ForEach(settings.wheels) { wheel in
+                    Text(wheel.name.isEmpty ? "Untitled" : wheel.name).tag(wheel.id)
+                }
+            }
+            LabeledContent("") {
+                HStack {
+                    Menu("New Wheel") {
+                        ForEach(RadialStarter.allCases) { starter in
+                            Button(starter.title) { add(starter.makeWheel()) }
+                        }
+                    }
+                    .fixedSize()
+                    .disabled(settings.wheels.count >= RadialSettings.maxWheels)
+                    Button("Duplicate") { add(selected.duplicate(named: selected.name)) }
+                        .disabled(settings.wheels.count >= RadialSettings.maxWheels)
+                    Button("Delete…", role: .destructive) { confirmingDelete = true }
+                        .disabled(settings.wheels.count <= 1)
+                }
+            }
+        } header: {
+            Text("Wheels")
+        } footer: {
+            Text("Each wheel has its own slices, color, shortcut and mouse button. A new wheel starts from a ready-made set (or Blank), which you can change freely.")
+                .font(.callout).foregroundStyle(.secondary)
+        }
+        .confirmationDialog("Delete the \(selected.name) wheel?", isPresented: $confirmingDelete) {
+            Button("Delete", role: .destructive) { delete(selected.id) }
+        } message: {
+            Text("Its slices and its shortcut and mouse button go with it.")
+        }
+    }
+
+    /// Adds a wheel, named so it doesn't repeat another's name, and shows it.
+    private func add(_ new: RadialWheel) {
+        var wheel = new
         let names = Set(settings.wheels.map(\.name))
-        var name = wheel.name, number = 2
-        while names.contains(name) { name = "\(wheel.name) \(number)"; number += 1 }
+        let base = wheel.name.isEmpty ? "Wheel" : wheel.name
+        var name = base, number = 2
+        while names.contains(name) { name = "\(base) \(number)"; number += 1 }
         wheel.name = name
         settings.wheels.append(wheel)
+        selectedID = wheel.id
+    }
+
+    private func delete(_ id: UUID) {
+        guard settings.wheels.count > 1, let index = settings.wheels.firstIndex(where: { $0.id == id }) else { return }
+        settings.wheels.remove(at: index)
+        selectedID = settings.wheels[max(0, index - 1)].id
     }
 
     private func wheelSection(_ wheel: Binding<RadialWheel>) -> some View {
         let value = wheel.wrappedValue
         return Section {
+            TextField("Name", text: wheel.name, prompt: Text("Wheel"))
             LabeledContent("Color") {
                 RadialColorSwatches(color: wheel.color)
             }
@@ -115,16 +162,11 @@ struct RadialMenuSettingsView: View {
                 }
             }
             LabeledContent("Try it") {
-                HStack {
-                    Button("Open \(value.name)") { RadialMenuEngine.current?.preview(value) }
-                        .disabled(RadialMenuEngine.current == nil)
-                    if settings.wheels.count > 1 {
-                        Button("Delete Wheel", role: .destructive) { settings.wheels.removeAll { $0.id == value.id } }
-                    }
-                }
+                Button("Open \(value.name.isEmpty ? "the Wheel" : value.name)") { RadialMenuEngine.current?.preview(value) }
+                    .disabled(RadialMenuEngine.current == nil)
             }
         } header: {
-            Text("\(value.name) wheel")
+            Text(value.name.isEmpty ? "Wheel" : value.name)
         } footer: {
             if value.shortcut == nil && value.mouseButton == nil {
                 Text("Set a shortcut or a mouse button to open this wheel.")

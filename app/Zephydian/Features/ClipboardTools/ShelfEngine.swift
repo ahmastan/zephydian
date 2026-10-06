@@ -216,6 +216,8 @@ struct ShelfContent: View {
     /// The floating shelf draws its own glass card; in the panel, the panel's material is around it.
     let floating: Bool
     let close: () -> Void
+    /// False in the panel's Shelf tab, which has nothing to close or go back to.
+    var showsClose = true
     @State private var targeted = false
     private var model: ShelfStore { ShelfStore.shared }
 
@@ -230,10 +232,12 @@ struct ShelfContent: View {
                             .help("Clear the shelf")
                             .accessibilityLabel("Clear the shelf")
                     }
-                    Button(action: close) { Image(systemName: floating ? "xmark" : "chevron.down") }
-                        .glassIconButtonStyle()
-                        .help(floating ? "Close (what's on it stays)" : "Back")
-                        .accessibilityLabel(floating ? "Close the shelf" : "Back")
+                    if showsClose {
+                        Button(action: close) { Image(systemName: floating ? "xmark" : "chevron.down") }
+                            .glassIconButtonStyle()
+                            .help(floating ? "Close (what's on it stays)" : "Back")
+                            .accessibilityLabel(floating ? "Close the shelf" : "Back")
+                    }
                 }
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 8)], spacing: 8) {

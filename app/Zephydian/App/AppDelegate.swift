@@ -156,6 +156,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Features.shared.appSettings = settings
         CommandBarHooks.openSettings = { [weak self] page in self?.model.openSettingsWindow(page) }
         RadialActions.showPanel = { [weak self] in self?.panel.show() }
+        // Panel tabs for games and utilities that were uninstalled are left out until they're back.
+        settings.itemExists = { GameRegistry.info(for: $0) != nil }
+        RadialActions.openNotesWindow = { [weak self] in self?.model.detachNotes() }
         CommandBarHooks.openUtility = { [weak self] id in
             guard let self, !self.model.isOnboarding else { return }
             self.model.closeLibrary()
