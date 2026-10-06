@@ -5,11 +5,7 @@ import Observation
 /// UI state shared between the panel's views and the controllers that drive it.
 @Observable
 final class AppModel {
-    enum Tab: String, CaseIterable, Identifiable {
-        case games, utilities, notes, settings
-        var id: Self { self }
-        var title: String { rawValue.capitalized }
-    }
+    typealias Tab = PanelTab
 
     /// The selected tab, remembered between launches.
     var tab: Tab { didSet { UserDefaults.standard.set(tab.rawValue, forKey: "lastTab") } }

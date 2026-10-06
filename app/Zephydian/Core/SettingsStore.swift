@@ -80,6 +80,22 @@ nonisolated enum PanelStyle: String, CaseIterable, Identifiable {
     var cornerRadius: CGFloat { self == .glass ? 24 : 16 }
 }
 
+/// The panel's top tabs. People choose their order and which ones show (Settings → Panel & Corner).
+nonisolated enum PanelTab: String, CaseIterable, Identifiable {
+    case games, utilities, notes, settings
+    var id: Self { self }
+    var title: String { rawValue.capitalized }
+
+    var symbol: String {
+        switch self {
+        case .games: "gamecontroller"
+        case .utilities: "wrench.and.screwdriver"
+        case .notes: "note.text"
+        case .settings: "gearshape"
+        }
+    }
+}
+
 /// How big the panel is. Text keeps its size; game boards, notes and lists get more or less room.
 nonisolated enum PanelSize: String, CaseIterable, Identifiable {
     case small, medium, large
@@ -139,6 +155,27 @@ final class SettingsStore {
     var featuresIntroSeen: Bool { didSet { defaults.set(featuresIntroSeen, forKey: "featuresIntroSeen") } }
     var panelStyle: PanelStyle { didSet { defaults.set(panelStyle.rawValue, forKey: "panelStyle") } }
     var panelSize: PanelSize { didSet { defaults.set(panelSize.rawValue, forKey: "panelSize") } }
+    /// Every panel tab, in the order chosen (hidden ones keep their place for when they come back).
+    var tabOrder: [PanelTab] { didSet { defaults.set(tabOrder.map(\.rawValue), forKey: "tabOrder") } }
+    /// Tabs left out of the panel's tab bar. At least one tab always stays.
+    var hiddenTabs: Set<PanelTab> { didSet { defaults.set(hiddenTabs.map(\.rawValue).sorted(), forKey: "hiddenTabs") } }
+    /// The tabs the panel shows, in order (never empty).
+    var visibleTabs: [PanelTab] {
+        let tabs = tabOrder.filter { !hiddenTabs.contains($0) }
+        return tabs.isEmpty ? [tabOrder.first ?? .games] : tabs
+    }
+    /// Shows or hides a tab. Hiding the last visible one does nothing.
+    func setTab(_ tab: PanelTab, visible: Bool) {
+        if visible {
+            hiddenTabs.remove(tab)
+        } else if visibleTabs.count > 1 || !visibleTabs.contains(tab) {
+            hiddenTabs.insert(tab)
+        }
+    }
+    func resetTabs() {
+        tabOrder = PanelTab.allCases
+        hiddenTabs = []
+    }
     /// The panel's global shortcut, recorded by the person (nil = none).
     var panelShortcut: KeyShortcut? { didSet { defaults.set(try? JSONEncoder().encode(panelShortcut), forKey: "panelShortcut") } }
 
@@ -168,6 +205,14 @@ final class SettingsStore {
         featuresIntroSeen = defaults.bool(forKey: "featuresIntroSeen")
         panelStyle = value("panelStyle", .glass)
         panelSize = value("panelSize", .medium)
+        // Unknown names are dropped and missing tabs added at the end, so a newer or older version's list still works.
+        var order: [PanelTab] = []
+        for tab in (defaults.stringArray(forKey: "tabOrder") ?? []).compactMap(PanelTab.init(rawValue:)) where !order.contains(tab) {
+            order.append(tab)
+        }
+        tabOrder = order + PanelTab.allCases.filter { !order.contains($0) }
+        let hidden = Set((defaults.stringArray(forKey: "hiddenTabs") ?? []).compactMap(PanelTab.init(rawValue:)))
+        hiddenTabs = hidden.count >= PanelTab.allCases.count ? [] : hidden
         // Worked out first and assigned once: in an @Observable class even this assignment saves.
         var shortcut = defaults.data(forKey: "panelShortcut").flatMap { try? JSONDecoder().decode(KeyShortcut?.self, from: $0) } ?? nil
         // Before any key could be recorded there were three choices; keep the one picked.

@@ -29,10 +29,14 @@ struct RootView: View {
             } else {
                 VStack(spacing: 0) {
                     header
-                    SegmentedControl(selection: $model.tab, options: AppModel.Tab.allCases, title: \.title,
-                                     height: 34, fontSize: 13, glassTrack: true)
-                        .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
+                    // One tab left: no bar, the page gets the room. A page opened from a hidden tab
+                    // (a utility's shortcut, say) highlights no tab.
+                    if settings.visibleTabs.count > 1 {
+                        SegmentedControl(selection: $model.tab, options: settings.visibleTabs, title: \.title,
+                                         height: 34, fontSize: 13, glassTrack: true)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 12)
+                    }
 
                     Group {
                         switch model.tab {
@@ -55,6 +59,10 @@ struct RootView: View {
         .animation(.easeOut(duration: 0.2), value: model.isShowingLibrary)
         .animation(.easeOut(duration: 0.2), value: model.isShowingStats)
         .animation(.easeOut(duration: 0.2), value: model.isShowingShelf)
+        .onChange(of: settings.visibleTabs) { _, tabs in
+            // The tab on screen was just hidden in Settings: move to the first one left.
+            if !tabs.contains(model.tab), let first = tabs.first { model.tab = first }
+        }
         .tint(settings.accentColor)
         .panelButtonStyle()
         .overlay {

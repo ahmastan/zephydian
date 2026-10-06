@@ -103,6 +103,10 @@ final class PanelController: NSObject {
         armed = false
         typedInUtility = false
         if !model.isOnboarding {
+            // A hidden tab opened for a moment (by a shortcut) isn't where the panel opens next time.
+            if !settings.visibleTabs.contains(model.tab), !model.isShowingGame, !model.isShowingLibrary, !model.isShowingStats {
+                model.tab = settings.visibleTabs[0]
+            }
             notes.reloadChangedFiles()
             model.panelOpenCount += 1
         }
@@ -453,17 +457,15 @@ final class PanelController: NSObject {
         }
         guard !model.isOnboarding else { return false }
         switch key {
-        case ",": model.openSettingsWindow(nil)   // ⌘, is the Settings window, as in every Mac app; ⌘4 is the short tab
+        case ",": model.openSettingsWindow(nil)   // ⌘, is the Settings window, as in every Mac app; the Settings tab is the short list
         case "1", "2", "3", "4":
+            // ⌘1, ⌘2… follow the tabs as they're shown (the order and hidden tabs are the person's choice).
+            let tabs = settings.visibleTabs
+            guard let number = Int(key), number <= tabs.count else { return false }
             if model.isShowingGame { model.closeGame() }
             model.closeLibrary()
             model.closeStats()
-            model.tab = switch key {
-            case "1": .games
-            case "2": .utilities
-            case "3": .notes
-            default: .settings
-            }
+            model.tab = tabs[number - 1]
         case "w": hide()
         case "f" where model.isShowingLibrary && !model.isShowingGame: model.librarySearchRequest += 1
         case "z" where model.isShowingGame: return model.gameSession?.undo() ?? false

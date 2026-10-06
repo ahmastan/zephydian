@@ -164,7 +164,64 @@ private struct PanelPage: View {
             } footer: {
                 FooterNote(settings.autoHide.explanation)
             }
+            PanelTabsSection()
         }
+    }
+}
+
+/// The panel's tabs: which show and in what order. Rows are dragged to reorder (or moved from their menu).
+private struct PanelTabsSection: View {
+    @Environment(SettingsStore.self) private var settings
+
+    var body: some View {
+        Section {
+            ForEach(settings.tabOrder) { tab in
+                row(tab)
+            }
+            .onMove { from, to in settings.tabOrder.move(fromOffsets: from, toOffset: to) }
+        } header: {
+            HStack {
+                Text("Tabs")
+                Spacer()
+                Button("Reset") { settings.resetTabs() }
+                    .controlSize(.small)
+                    .disabled(settings.tabOrder == PanelTab.allCases && settings.hiddenTabs.isEmpty)
+            }
+        } footer: {
+            FooterNote("Drag to change the order. ⌘1, ⌘2… follow the tabs that show. With one tab left, the panel shows just that page.")
+        }
+    }
+
+    private func row(_ tab: PanelTab) -> some View {
+        let visible = settings.visibleTabs
+        let index = visible.firstIndex(of: tab)
+        let isLast = visible == [tab]
+        return HStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal")
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+            Toggle(isOn: Binding(get: { index != nil }, set: { settings.setTab(tab, visible: $0) })) {
+                Label(tab.title, systemImage: tab.symbol)
+            }
+            .toggleStyle(.checkbox)
+            .disabled(isLast)
+            .help(isLast ? "At least one tab stays in the panel" : "")
+            Spacer()
+            if let index, index < 4 {
+                Text("⌘\(index + 1)").foregroundStyle(.secondary).monospacedDigit()
+            }
+        }
+        .contextMenu {
+            Button("Move Up") { move(tab, by: -1) }.disabled(settings.tabOrder.first == tab)
+            Button("Move Down") { move(tab, by: 1) }.disabled(settings.tabOrder.last == tab)
+        }
+        .accessibilityAction(named: "Move Up") { move(tab, by: -1) }
+        .accessibilityAction(named: "Move Down") { move(tab, by: 1) }
+    }
+
+    private func move(_ tab: PanelTab, by step: Int) {
+        guard let i = settings.tabOrder.firstIndex(of: tab), settings.tabOrder.indices.contains(i + step) else { return }
+        settings.tabOrder.swapAt(i, i + step)
     }
 }
 

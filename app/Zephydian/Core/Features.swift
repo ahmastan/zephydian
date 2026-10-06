@@ -352,6 +352,12 @@ extension Features {
                 settings: { AnyView(QuickPanelSettingsView()) },
                 makeEngine: { QuickPanelEngine() }),
             Feature(
+                id: "radial-menu", name: "Radial Menu",
+                summary: "A wheel of apps, folders, utilities and actions around the pointer, from a shortcut or a mouse button.",
+                symbol: "circle.circle", group: .everyday, uses: [.accessibility],
+                settings: { AnyView(RadialMenuSettingsView()) },
+                makeEngine: { RadialMenuEngine() }),
+            Feature(
                 id: "quick-toggles", name: "Quick Toggles",
                 summary: "Dark mode, desktop icons, hidden files, eject disks, empty the Trash, lock, keyboard light and mute the mic, in one click.",
                 symbol: "switch.2", group: .everyday, essential: true,

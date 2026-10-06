@@ -7,6 +7,10 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+- **Radial Menu** (Settings → Features): a wheel of slices around the pointer, opened by a shortcut or a mouse button. Hold, point and let go, or click; arrow keys, number keys and Esc work too. Slices can open apps, files, folders and links, run your utilities and Zephydian features, flip quick toggles, arrange windows, press media keys or any key combination, paste a snippet, run a shortcut from the Shortcuts app, or show what's playing. Folders hold more slices. Make several wheels from ready-made sets, each with its own color, shortcut and button; choose the size, the highlight's strength and where the wheel appears.
+- **Choose the panel's tabs**: in Settings → Panel & Corner → Tabs, hide any of Games, Utilities, Notes and Settings and drag them into your own order. ⌘1, ⌘2… follow the tabs that show, and with a single tab left the panel shows just that page.
+
 ## [0.7.0] - 2026-10-05
 
 ### Added
